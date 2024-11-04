@@ -17,7 +17,22 @@ alias ls='ls -aG'
 
 ## Create a new journal entry in the ~/journal directory with a filename that includes the current date and a sequential number. Then open the file in a new iTerm window using the Micro text editor. Close the iTerm window when the file is saved and closed in Micro.
 journal() {
-  command -v micro &>/dev/null || { echo "Micro required. Install via homebrew." >&2; exit 1; }
+  command -v micro &>/dev/null || { echo "Journal requires Micro for text editing. Install Micro via homebrew with: 'brew install micro'" >&2; return 1; }
+  
+  # Check if ~/journal exists. If not, prompt user y/n if they want to create it
+  if [ ! -d "$HOME/journal" ]; then
+    echo "Journal directory not found"
+    read -r "answer?Create journal directory at $HOME/journal? (y/n) "
+    if [ "$answer" != "${answer#[Yy]}" ]; then
+      mkdir -p "$HOME/journal"
+      echo "Journal directory created at $HOME/journal"
+      echo "Type 'journal' again to create your first entry"
+      return 0
+    else
+      echo "Journal directory not created. Exiting..."
+      return 1
+    fi
+  fi
 
   today=$(date +"%Y-%m-%d")
   count=$(printf "%02d" $(( $(find ~/journal/ -type f -name "$today*" | wc -l) + 1 )))
