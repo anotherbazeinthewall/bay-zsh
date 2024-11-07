@@ -36,7 +36,7 @@ journal() {
 
   today=$(date +"%Y-%m-%d")
   count=$(printf "%02d" $(( $(find ~/journal/ -type f -name "$today*" | wc -l) + 1 )))
-  filename="$HOME/journal/${today}_${count}.txt"
+  filename="$HOME/journal/${today}_${count}.md"
 
   echo -e "[$today] [Entry #$count]\n\n" > "${filename}"
 
