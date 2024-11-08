@@ -38,7 +38,7 @@ journal() {
   count=$(printf "%02d" $(( $(find ~/journal/ -type f -name "$today*" | wc -l) + 1 )))
   filename="$HOME/journal/${today}_${count}.md"
 
-  echo -e "[$today] [Entry #$count]\n\n" > "${filename}"
+  echo -e "## $today [Entry #$count]\n\n" > "${filename}"
 
   (osascript -e 'tell application "iTerm"
     create window with default profile
