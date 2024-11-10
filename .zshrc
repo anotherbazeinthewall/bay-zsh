@@ -1,5 +1,9 @@
 # HOUSEKEEPING
 
+export TERM="xterm-256color"
+export ZSH_TMUX_FIXTERM=256
+export COLORTERM="truecolor"
+
 ## Prevent any keystrokes until zshrc is loaded
 stty -echo
 
@@ -9,52 +13,10 @@ if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
 fi
 
 # ALIAS CONFIGS
+alias ls='ls -aG'
 alias pip=pip3
 alias python=python3
-alias ls='ls -aG'
-
-# JOURNAL 
-
-## Create a new journal entry in the ~/journal directory with a filename that includes the current date and a sequential number. Then open the file in a new iTerm window using the Micro text editor. Close the iTerm window when the file is saved and closed in Micro.
-journal() {
-  command -v micro &>/dev/null || { echo "Journal requires Micro for text editing. Install Micro via homebrew with: 'brew install micro'" >&2; return 1; }
-  
-  # Check if ~/journal exists. If not, prompt user y/n if they want to create it
-  if [ ! -d "$HOME/journal" ]; then
-    echo "Journal directory not found"
-    read -r "answer?Create journal directory at $HOME/journal? (y/n) "
-    if [ "$answer" != "${answer#[Yy]}" ]; then
-      mkdir -p "$HOME/journal"
-      echo "Journal directory created at $HOME/journal"
-      echo "Type 'journal' again to create your first entry"
-      return 0
-    else
-      echo "Journal directory not created. Exiting..."
-      return 1
-    fi
-  fi
-
-  today=$(date +"%Y-%m-%d")
-  count=$(printf "%02d" $(( $(find ~/journal/ -type f -name "$today*" | wc -l) + 1 )))
-  filename="$HOME/journal/${today}_${count}.md"
-
-  echo -e "## $today [Entry #$count]\n\n" > "${filename}"
-
-  (osascript -e 'tell application "iTerm"
-    create window with default profile
-    tell the first window
-      set zoomed to true
-      tell current session
-        write text "micro '"${filename}"' +3 && exit"
-      end tell
-      repeat while exists current session
-        delay 0.1
-      end repeat
-      set zoomed to false
-      close
-    end tell
-  end tell' &>/dev/null &)
-}
+alias journal="$HOME/dev/bay-zsh/journal.sh"
 
 # $PATH CONFIG
 
@@ -200,8 +162,6 @@ poetry() {
     fi
 }
 
-
-
 [[ -n $ZSH_POETRY_AUTO_ACTIVATE ]] && _zp_check_poetry_venv
 
 ## Disable Poetry's default prompt prefix
@@ -236,7 +196,7 @@ function virtual_env_info() {
 
   # Check if we're in a Node.js project
   if find_project_root "package.json"; then
-    env_info+="%F{#FFCC66}npm(node:$(node -v))%f "
+    env_info+="%F{221}npm(node:$(node -v))%f "
   fi
 
   # If a Python virtual environment is activated, verify it's actually valid
@@ -256,9 +216,9 @@ function virtual_env_info() {
     python_version=$(python --version 2>&1 | cut -d ' ' -f 2)
 
     if find_project_root "pyproject.toml"; then
-      env_info+="%F{#FFCC66}poetry(python:${python_version})%f "
+      env_info+="%F{221}poetry(python:${python_version})%f "
     else
-      env_info+="%F{#FFCC66}python:${python_version}%f "
+      env_info+="%F{221}python:${python_version}%f "
     fi
   fi
 
@@ -267,17 +227,17 @@ function virtual_env_info() {
 
 ## Function that sets up the username in the prompt
 function set_prompt_username() {
-    prompt_username="%F{#99CC99}%n%f"
+    prompt_username="%F{78}%n%f"
 }
 
 ## Add Functions to the precmd Functions Array
 precmd_functions+=(set_prompt_username)
 
 ## Git Prompt Config
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{#66CCCC}git:(%F{green}"
+ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git:(%F{green}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
-ZSH_THEME_GIT_PROMPT_DIRTY="%F{#66CCCC}) %F{#99CC99}*%f"
-ZSH_THEME_GIT_PROMPT_CLEAN="%F{#66CCCC})"
+ZSH_THEME_GIT_PROMPT_DIRTY="%F{116}) %F{78}*%f"
+ZSH_THEME_GIT_PROMPT_CLEAN="%F{116})"
 
 ### Function to Display Git Info in the Prompt
 function git_prompt_info() {
@@ -308,7 +268,7 @@ function parse_git_dirty() {
 }
 
 ## Finally Construct the Prompt
-PROMPT='%F{#FF99CC}☼%f ${prompt_username} %F{#FF9966}%~%f $(virtual_env_info)$(git_prompt_info)%B%F{white}%#%f%b '
+PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f $(virtual_env_info)$(git_prompt_info)%B%F{white}%#%f%b '
 
 # AUTOSUGGEST CONFIG
 
