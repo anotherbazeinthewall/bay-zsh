@@ -268,8 +268,8 @@ function set_prompt_username() {
     prompt_username="%F{78}%n%f"
 }
 
-# ### Add Functions to the precmd Functions Array
-# precmd_functions+=(set_prompt_username)
+### Add Functions to the precmd Functions Array
+precmd_functions+=(set_prompt_username)
 
 ### Finally Construct the Prompt
 PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f $(virtual_env_info)$(git_prompt_info)%B%F{white}%#%f%b '
