@@ -155,7 +155,7 @@ poetry() {
         # Install dependencies without installing the project itself
         poetry install --no-root
 
-        echo -e "\e[38;2;0;255;255mSuccessfully initiated [$(basename "$PWD")] Poetry project with MIT license and README\e[0m 😎👍"
+        echo -e "\e[38;2;0;255;255mSuccessfully initiated [$(basename "$PWD")] Poetry project with README\e[0m 😎👍"
         echo -e "\e[38;2;105;105;105mActivating environment...\e[0m"
 
         # Move to the project root directory
