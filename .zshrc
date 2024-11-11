@@ -16,7 +16,6 @@ fi
 alias ls='ls -aG'
 alias pip=pip3
 alias python=python3
-alias journal="$HOME/dev/bay-zsh/journal.sh"
 
 # $PATH CONFIG
 
