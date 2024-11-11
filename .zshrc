@@ -1,9 +1,5 @@
 # HOUSEKEEPING
 
-export TERM="xterm-256color"
-export ZSH_TMUX_FIXTERM=256
-export COLORTERM="truecolor"
-
 ## Prevent any keystrokes until zshrc is loaded
 stty -echo
 
@@ -12,16 +8,21 @@ if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
   unset VIRTUAL_ENV
 fi
 
-# ALIAS CONFIGS
+## Update terminal color settings 
+export TERM="xterm-256color"
+export ZSH_TMUX_FIXTERM=256
+export COLORTERM="truecolor"
+
+## ALIASES
 alias ls='ls -aG'
 alias pip=pip3
 alias python=python3
 
-# $PATH CONFIG
+# PATH CONFIGURATION 
 
 ## Add specific PATH entries to the beginning of the existing PATH, ensuring that the specified directories are searched first when executing commands. 
-export PATH="$HOME/.nvm/versions/node/v22.2.0/bin:$PATH" # Node.js version managed by NVM
 export PATH="$HOME/Library/Frameworks/Python.framework/Versions/3.12/bin:$PATH" # Python 3.12
+export PATH="$HOME/.nvm/versions/node/v22.2.0/bin:$PATH" # Default Node.js version managed by NVM
 export PATH="/Users/Baze/.local/bin:$PATH"
 
 ## Then, read the existing PATH, split it into individual entries, and iterate through each entry. If the entry is not already present in the new_path variable, append it to the end of new_path. Finally, update the new_path variable with the cleaned-up PATH.
@@ -34,17 +35,19 @@ done < <(echo "$PATH" | tr ':' '\n')
 new_path="${new_path#:}"
 export PATH="$new_path"
 
-# NVM CONFIG
+# VIRTUAL ENVIRONMENT CONFIGURATION 
 
-## Set the NVM_DIR environment variable to the path of the NVM directory, checks if the nvm.sh script exists and sources it to load NVM, and also checks if the bash_completion script exists and sources it to enable bash completion for NVM commands.
+## NVM CONFIG
+
+### Set the NVM_DIR environment variable to the path of the NVM directory, checks if the nvm.sh script exists and sources it to load NVM, and also checks if the bash_completion script exists and sources it to enable bash completion for NVM commands.
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" 
 
-## Automatically use the Node version defined in .nvmrc, or default to the global version if .nvmrc is absent when sourcing zshrc
+### Automatically use the Node version defined in .nvmrc, or default to the global version if .nvmrc is absent when sourcing zshrc
 autoload -U add-zsh-hook
 
-## Define and execute function to check and use Node version on shell startup
+### Define and execute function to check and use Node version on shell startup
 nvm_auto_switch() {
   if [ -f .nvmrc ]; then
     nvm use > /dev/null 2>&1
@@ -54,15 +57,15 @@ nvm_auto_switch() {
 }
 nvm_auto_switch
 
-## Define custom custom cd function for automatic switching when changing directories
+### Define custom custom cd function for automatic switching when changing directories
 cd() {
   builtin cd "$@" || return
   nvm_auto_switch
 }
 
-# POETRY ENV AUTOMATION (adapted from https://github.com/darvid/zsh-poetry)
+## POETRY ENV AUTOMATION (adapted from https://github.com/darvid/zsh-poetry)
 
-##  Activate poetry environment if pyproject.toml is present and deactivate if we leave the project
+###  Activate poetry environment if pyproject.toml is present and deactivate if we leave the project
 ZSH_POETRY_AUTO_ACTIVATE=${ZSH_POETRY_AUTO_ACTIVATE:-1}
 ZSH_POETRY_AUTO_DEACTIVATE=${ZSH_POETRY_AUTO_DEACTIVATE:-1}
 
@@ -106,14 +109,13 @@ _zp_check_poetry_venv() {
 
 [[ -f pyproject.toml ]] && _zp_current_project="${PWD}"
 
-
 add-zsh-hook chpwd _zp_check_poetry_venv
 
 poetry-shell() {
   _zp_check_poetry_venv
 }
 
-# Define the MIT license text as a variable
+## Define the MIT license text as a variable
 MIT_LICENSE_TEXT="MIT License
 
 Copyright (c) $(date +%Y) $(git config user.name)
@@ -136,7 +138,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."
 
-# Define the poetry function
+## Define the poetry function
 poetry() {
     if [[ "$1" == "init" && $# -eq 1 ]]; then
         # Run the poetry init command with MIT license and non-interactive mode
@@ -163,20 +165,14 @@ poetry() {
 
 [[ -n $ZSH_POETRY_AUTO_ACTIVATE ]] && _zp_check_poetry_venv
 
-## Disable Poetry's default prompt prefix
+### Disable Poetry's default prompt prefix
 export POETRY_VIRTUALENVS_IN_PROJECT=false
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-## Set default to install envs in project
-
+### Set default to install envs in project
 export POETRY_VIRTUALENVS_IN_PROJECT=true
 
-# PROMPT CONFIG
-
-## Enable prompt substitution
-setopt PROMPT_SUBST
-
-## Function to display virtual environment info (Node.js, Python venv, Pipenv)
+### Function to display virtual environment info (Node.js, Python venv, Pipenv)
 function virtual_env_info() {
   local env_info=""
 
@@ -224,13 +220,7 @@ function virtual_env_info() {
   echo $env_info
 }
 
-## Function that sets up the username in the prompt
-function set_prompt_username() {
-    prompt_username="%F{78}%n%f"
-}
-
-## Add Functions to the precmd Functions Array
-precmd_functions+=(set_prompt_username)
+# GIT CONFIGURATION 
 
 ## Git Prompt Config
 ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git:(%F{green}"
@@ -266,7 +256,20 @@ function parse_git_dirty() {
   fi
 }
 
-## Finally Construct the Prompt
+# PROMPT CONFIG
+
+## Enable prompt substitution
+setopt PROMPT_SUBST
+
+### Function that sets up the username in the prompt
+function set_prompt_username() {
+    prompt_username="%F{78}%n%f"
+}
+
+# ### Add Functions to the precmd Functions Array
+# precmd_functions+=(set_prompt_username)
+
+### Finally Construct the Prompt
 PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f $(virtual_env_info)$(git_prompt_info)%B%F{white}%#%f%b '
 
 # AUTOSUGGEST CONFIG
@@ -293,9 +296,9 @@ autosuggest_partial_charwise() {
 zle -N autosuggest_partial_charwise
 
 ## Autosuggest Keybindings
-bindkey '^[[C' autosuggest_partial_charwise # Bind right arrow key to custom widget
-bindkey '^I' autosuggest-accept
-bindkey '^E' forward-word
+bindkey '^[[C' autosuggest_partial_charwise # Bind the Right Arrow key to accept suggestion
+bindkey '^I' autosuggest-accept # Bind the Tab key to accept suggestion
+bindkey '^E' forward-word # Bind 
 
 ## Autosuggest Options
 ENABLE_CORRECTION="true"
