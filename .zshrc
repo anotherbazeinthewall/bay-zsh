@@ -14,16 +14,22 @@ export ZSH_TMUX_FIXTERM=256
 export COLORTERM="truecolor"
 
 ## ALIASES
-alias ls='ls -aG'
-alias pip=pip3
-alias python=python3
+alias ls='ls -aG' # Show hidden files by default
 
 # PATH CONFIGURATION 
 
-## Add specific PATH entries to the beginning of the existing PATH, ensuring that the specified directories are searched first when executing commands. 
-export PATH="$HOME/Library/Frameworks/Python.framework/Versions/3.12/bin:$PATH" # Python 3.12
-export PATH="$HOME/.nvm/versions/node/v22.2.0/bin:$PATH" # Default Node.js version managed by NVM
-export PATH="/Users/Baze/.local/bin:$PATH"
+# Set the PYENV_ROOT and PATH environment variables, then initialize pyenv.
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+### Set the NVM_DIR and PATH environment variables, then initialize nvm.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Loads nvm bash_completion
+
+# export PATH="$HOME/.nvm/versions/node/v22.2.0/bin:$PATH" # Default Node.js version managed by NVM
+export PATH="$HOME/.local/bin:$PATH"
 
 ## Then, read the existing PATH, split it into individual entries, and iterate through each entry. If the entry is not already present in the new_path variable, append it to the end of new_path. Finally, update the new_path variable with the cleaned-up PATH.
 new_path=""
@@ -39,10 +45,6 @@ export PATH="$new_path"
 
 ## NVM CONFIG
 
-### Set the NVM_DIR environment variable to the path of the NVM directory, checks if the nvm.sh script exists and sources it to load NVM, and also checks if the bash_completion script exists and sources it to enable bash completion for NVM commands.
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" 
 
 ### Automatically use the Node version defined in .nvmrc, or default to the global version if .nvmrc is absent when sourcing zshrc
 autoload -U add-zsh-hook
