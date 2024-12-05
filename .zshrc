@@ -58,10 +58,10 @@ nvm_auto_use() {
         if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
             nvm use "$nvmrc_node_version" >/dev/null 2>&1  # Suppresses "Now using node..."
         fi
-        export virtual_environment="node:v$(node -v | tr -d 'v') "
+        export VIRTUAL_ENV_INFO="node:v$(node -v | tr -d 'v') "
     else
         nvm use default >/dev/null 2>&1  # Suppresses "Now using node..."
-        export virtual_environment="node:v$(node -v | tr -d 'v') "
+        export VIRTUAL_ENV_INFO="node:v$(node -v | tr -d 'v') "
     fi
 }
 
@@ -82,7 +82,7 @@ eval "$(pyenv init -)"
 
 ### Function to automatically activate Python environment based on project type
 pyenv_auto_use() {
-    # Initialize virtual_environment as empty for Python
+    # Initialize VIRTUAL_ENV_INFO as empty for Python
     local python_env=""
 
     # Disable virtual env's custom prompt
@@ -135,9 +135,9 @@ pyenv_auto_use() {
         pyenv global system >/dev/null 2>&1
     fi
     
-    # Update the virtual_environment variable only if we have a Python environment
+    # Update the VIRTUAL_ENV_INFO variable only if we have a Python environment
     if [ -n "$python_env" ]; then
-        export virtual_environment="$python_env"
+        export VIRTUAL_ENV_INFO="$python_env"
     fi
 }
 
@@ -159,8 +159,8 @@ manage_environment() {
         exit 2>/dev/null  # Exits Poetry subshell if active
     fi
     
-    # Initialize virtual_environment variable
-    export virtual_environment=""
+    # Initialize VIRTUAL_ENV_INFO variable
+    export VIRTUAL_ENV_INFO=""
 
     # Check for Node.js project and set Node version
     if [ -f "package.json" ]; then
@@ -181,7 +181,7 @@ manage_environment  # Ensures function runs in current directory upon shell star
 # GIT CONFIGURATION 
 
 ## Git Prompt Config
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git:(%F{green}"
+ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git(%F{green}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
 ZSH_THEME_GIT_PROMPT_DIRTY="%F{116}) %F{78}*%f"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{116})"
@@ -230,7 +230,7 @@ function set_prompt_username() {
 precmd_functions+=(set_prompt_username)
 
 # Finally Construct the Prompt
-PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f %F{221}$virtual_environment$(git_prompt_info)%B%F{white}%#%f%b '
+PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f %F{221}$VIRTUAL_ENV_INFO$(git_prompt_info)%B%F{white}%#%f%b '
 
 # =============================================================================
 # COMPLETION SYSTEM & KEYBINDINGS
