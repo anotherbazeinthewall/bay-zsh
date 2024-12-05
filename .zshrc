@@ -105,7 +105,7 @@ pyenv_auto_use() {
             local python_version
             python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
             if [ $? -eq 0 ]; then
-                python_env="poetry(%F{225}python:${python_version}%F{221}) "
+                python_env="poetry(python:${python_version}}) "
             else
                 python_env="poetry(python:unknown) "
             fi
