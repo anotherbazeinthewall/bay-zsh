@@ -1,4 +1,4 @@
-# Prevent any keystrokes until zshrc is loaded
+# Disable keystrokes while script is running 
 stty -echo
 
 # =============================================================================
@@ -82,31 +82,50 @@ eval "$(pyenv init -)"
 
 ### Function to automatically activate Python environment based on project type
 pyenv_auto_use() {
+    # Initialize virtual_environment as empty for Python
+    local python_env=""
+    
     # Check if we're in a Python project with a specific environment setup
     if [ -f "pyproject.toml" ]; then
         if [ -f "poetry.lock" ]; then
             # Use Poetry environment if poetry.lock is present
             poetry shell >/dev/null 2>&1  # Suppress output
             local python_version
-            python_version=$(python --version 2>&1 | awk '{print $2}')
-            export virtual_environment="poetry(python:$python_version) "
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            if [ $? -eq 0 ]; then
+                python_env="poetry(python:${python_version}) "
+            else
+                python_env="poetry(python:unknown) "
+            fi
         elif [ -d "venv" ] || [ -d ".venv" ]; then
             # Use local venv if no Poetry, but venv or .venv directory is present
-            source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate"
+            source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate" >/dev/null 2>&1
             local python_version
-            python_version=$(python --version 2>&1 | awk '{print $2}')
-            export virtual_environment="python:$python_version "
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            if [ $? -eq 0 ]; then
+                python_env="python:${python_version} "
+            else
+                python_env="python:unknown "
+            fi
         fi
     elif [ -d "venv" ] || [ -d ".venv" ]; then
         # If it's not a pyproject.toml project, activate venv directly
-        source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate"
+        source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate" >/dev/null 2>&1
         local python_version
-        python_version=$(python --version 2>&1 | awk '{print $2}')
-        export virtual_environment="python:$python_version"
+        python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            python_env="python:${python_version} "
+        else
+            python_env="python:unknown "
+        fi
     else
-        # If no specific environment, default to system Python and clear virtual_environment
-        pyenv global system
-        export virtual_environment=""
+        # If no specific environment, default to system Python
+        pyenv global system >/dev/null 2>&1
+    fi
+    
+    # Update the virtual_environment variable only if we have a Python environment
+    if [ -n "$python_env" ]; then
+        export virtual_environment="$python_env"
     fi
 }
 
@@ -117,7 +136,7 @@ pyenv_auto_use  # Ensures function runs in current directory upon shell start
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
-# -----------------------------------------------------------------------------
+# ------pyenv_auto-----------------------------------------------------------------------
 
 ### Function to manage virtual environment activation and deactivation
 manage_environment() {
@@ -242,5 +261,6 @@ autoload -Uz compinit && compinit
 # FINAL INITIALIZATION
 # =============================================================================
 
-# Allow keystrokes 
-stty erase ^?
+# Enable keystrokes now that the script is done 
+stty echo
+clear
