@@ -84,20 +84,31 @@ eval "$(pyenv init -)"
 pyenv_auto_use() {
     # Initialize virtual_environment as empty for Python
     local python_env=""
+
+    # Disable virtual env's custom prompt
+    export VIRTUAL_ENV_DISABLE_PROMPT=1
     
     # Check if we're in a Python project with a specific environment setup
     if [ -f "pyproject.toml" ]; then
         if [ -f "poetry.lock" ]; then
-            # Get Poetry env info without activating shell
+            # Get Poetry env info and activate environment
+            if [ -z "$POETRY_ACTIVE" ]; then
+                # Get the poetry env path
+                local poetry_venv
+                poetry_venv=$(poetry env info --path 2>/dev/null)
+                if [ $? -eq 0 ] && [ -n "$poetry_venv" ]; then
+                    source "$poetry_venv/bin/activate" 2>/dev/null
+                fi
+            fi
+            
+            # Get version after activation
             local python_version
-            python_version=$(poetry run python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
             if [ $? -eq 0 ]; then
                 python_env="poetry(python:${python_version}) "
             else
                 python_env="poetry(python:unknown) "
             fi
-            # Activate the shell after getting version
-            poetry shell >/dev/null 2>&1
         elif [ -d "venv" ] || [ -d ".venv" ]; then
             # Use local venv if no Poetry, but venv or .venv directory is present
             source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate" >/dev/null 2>&1
