@@ -1,34 +1,30 @@
-# HOUSEKEEPING
-
-## Prevent any keystrokes until zshrc is loaded
+# Prevent any keystrokes until zshrc is loaded
 stty -echo
 
-## UNSET PREXISTING VENVS
+# =============================================================================
+# HOUSEKEEPING
+# =============================================================================
+
+# UNSET PREXISTING VENVS
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
   unset VIRTUAL_ENV
 fi
 
-## Update terminal color settings 
+# Update terminal color settings 
 export TERM="xterm-256color"
 export ZSH_TMUX_FIXTERM=256
 export COLORTERM="truecolor"
 
-## ALIASES
+# =============================================================================
+# ALIASES & CUSTOM FUNCTIONS
+# =============================================================================
+
 alias ls='ls -aG' # Show hidden files by default
 
-# PATH CONFIGURATION 
+# =============================================================================
+# PATH MANAGEMENT
+# =============================================================================
 
-# Set the PYENV_ROOT and PATH environment variables, then initialize pyenv.
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-
-### Set the NVM_DIR and PATH environment variables, then initialize nvm.
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Loads nvm bash_completion
-
-# export PATH="$HOME/.nvm/versions/node/v22.2.0/bin:$PATH" # Default Node.js version managed by NVM
 export PATH="$HOME/.local/bin:$PATH"
 
 ## Then, read the existing PATH, split it into individual entries, and iterate through each entry. If the entry is not already present in the new_path variable, append it to the end of new_path. Finally, update the new_path variable with the cleaned-up PATH.
@@ -41,186 +37,115 @@ done < <(echo "$PATH" | tr ':' '\n')
 new_path="${new_path#:}"
 export PATH="$new_path"
 
-# VIRTUAL ENVIRONMENT CONFIGURATION 
+# =============================================================================
+# ENVIRONMENT MANAGERS
+# =============================================================================
 
-## NVM CONFIG
+# -----------------------------------------------------------------------------
+# NVM (Node Version Manager)
+# -----------------------------------------------------------------------------
 
+### Set the NVM_DIR and PATH environment variables, then initialize nvm.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Loads nvm bash_completion
 
-### Automatically use the Node version defined in .nvmrc, or default to the global version if .nvmrc is absent when sourcing zshrc
-autoload -U add-zsh-hook
-
-### Define and execute function to check and use Node version on shell startup
-nvm_auto_switch() {
-  if [ -f .nvmrc ]; then
-    nvm use > /dev/null 2>&1
-  else
-    nvm use default > /dev/null 2>&1
-  fi
-}
-nvm_auto_switch
-
-### Define custom custom cd function for automatic switching when changing directories
-cd() {
-  builtin cd "$@" || return
-  nvm_auto_switch
-}
-
-## POETRY ENV AUTOMATION (adapted from https://github.com/darvid/zsh-poetry)
-
-###  Activate poetry environment if pyproject.toml is present and deactivate if we leave the project
-ZSH_POETRY_AUTO_ACTIVATE=${ZSH_POETRY_AUTO_ACTIVATE:-1}
-ZSH_POETRY_AUTO_DEACTIVATE=${ZSH_POETRY_AUTO_DEACTIVATE:-1}
-
-autoload -U add-zsh-hook
-
-_zp_current_project=
-
-_zp_check_poetry_venv() {
-  local venv
-  if [[ -z $VIRTUAL_ENV ]] && [[ -n "${_zp_current_project}" ]]; then
-    _zp_current_project=
-  fi
-  if [[ -f pyproject.toml ]] \
-      && [[ "${PWD}" != "${_zp_current_project}" ]]; then
-    if [[ -n $_zp_current_project ]]; then
-      deactivate
-    fi
-
-    # if pyproject doesn't use poetry fail silently
-    if [[ "$(poetry env list &> /dev/null; echo $?)" != "0" ]]; then
-        return 1
-    fi
-
-    venv="$(command poetry env list --full-path | grep Activated | sed "s/ .*//" \
-        | head -1)"
-    if [[ -d "$venv" ]] && [[ "$venv" != "$VIRTUAL_ENV" ]]; then
-      source "$venv"/bin/activate || return $?
-      _zp_current_project="${PWD}"
-      return 0
-    fi
-  elif [[ -n $VIRTUAL_ENV ]] \
-      && [[ -n $ZSH_POETRY_AUTO_DEACTIVATE ]] \
-      && [[ "${PWD}" != "${_zp_current_project}" ]] \
-      && [[ "${PWD}" != "${_zp_current_project}"/* ]]; then
-    deactivate
-    _zp_current_project=
-    return $?
-  fi
-  return 1
-}
-
-[[ -f pyproject.toml ]] && _zp_current_project="${PWD}"
-
-add-zsh-hook chpwd _zp_check_poetry_venv
-
-poetry-shell() {
-  _zp_check_poetry_venv
-}
-
-# ## Define the MIT license text as a variable
-# MIT_LICENSE_TEXT="MIT License
-
-# Copyright (c) $(date +%Y) $(git config user.name)
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the \"Software\"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE."
-
-## Define the poetry function
-poetry() {
-    if [[ "$1" == "init" && $# -eq 1 ]]; then
-        # Run the poetry init command with MIT license and non-interactive mode
-        command poetry init --license MIT --no-interaction -vvv
-
-        # Create README.md
-        echo "# $(basename "$PWD")" > README.md
-
-        # # Write the MIT license text to the LICENSE file
-        # echo "$MIT_LICENSE_TEXT" > LICENSE
-
-        # Install dependencies without installing the project itself
-        poetry install --no-root
-
-        echo -e "\e[38;2;0;255;255mSuccessfully initiated [$(basename "$PWD")] Poetry project with README\e[0m 😎👍"
-        echo -e "\e[38;2;105;105;105mActivating environment...\e[0m"
-
-        # Move to the project root directory
-        cd .
+### Function to load the appropriate Node.js version based on .nvmrc if present
+nvm_auto_use() {
+    if [ -f ".nvmrc" ]; then
+        local nvmrc_node_version
+        nvmrc_node_version=$(<.nvmrc)  # Reads the version from .nvmrc
+        if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
+            nvm use "$nvmrc_node_version" >/dev/null 2>&1  # Suppresses "Now using node..."
+        fi
+        export virtual_environment="node:v$(node -v | tr -d 'v') "
     else
-        command poetry "$@"
+        nvm use default >/dev/null 2>&1  # Suppresses "Now using node..."
+        export virtual_environment="node:v$(node -v | tr -d 'v') "
     fi
 }
 
-[[ -n $ZSH_POETRY_AUTO_ACTIVATE ]] && _zp_check_poetry_venv
+### Automatically call nvm_auto_use when entering a directory
+autoload -U add-zsh-hook
+add-zsh-hook chpwd nvm_auto_use  # Calls nvm_auto_use on directory change
+nvm_auto_use  # Ensures function runs in current directory upon shell start
 
-### Disable Poetry's default prompt prefix
-export POETRY_VIRTUALENVS_IN_PROJECT=false
-export VIRTUAL_ENV_DISABLE_PROMPT=1
+# -----------------------------------------------------------------------------
+# PYENV (Python Environment Manager)
+# -----------------------------------------------------------------------------
 
-### Set default to install envs in project
-export POETRY_VIRTUALENVS_IN_PROJECT=true
+# Set the PYENV_ROOT and PATH environment variables, then initialize pyenv.
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
 
-### Function to display virtual environment info (Node.js, Python venv, Pipenv)
-function virtual_env_info() {
-  local env_info=""
-
-  # Function to search for pyproject.toml or package.json in parent directories
-  find_project_root() {
-    local search_file="$1"
-    local dir="$PWD"
-    while [[ "$dir" != "/" ]]; do
-      if [[ -f "$dir/$search_file" ]]; then
-        return 0
-      fi
-      dir=$(dirname "$dir")
-    done
-    return 1
-  }
-
-  # Check if we're in a Node.js project
-  if find_project_root "package.json"; then
-    env_info+="%F{221}npm(node:$(node -v))%f "
-  fi
-
-  # If a Python virtual environment is activated, verify it's actually valid
-  if [[ -n "$VIRTUAL_ENV" ]]; then
-    # Check if the virtual environment directory actually exists
-    if [[ ! -d "$VIRTUAL_ENV" ]]; then
-      unset VIRTUAL_ENV
-      return
-    fi
-
-    # Check if the virtual environment's Python interpreter exists
-    if [[ ! -x "$VIRTUAL_ENV/bin/python" ]]; then
-      unset VIRTUAL_ENV
-      return
-    fi
-
-    python_version=$(python --version 2>&1 | cut -d ' ' -f 2)
-
-    if find_project_root "pyproject.toml"; then
-      env_info+="%F{221}poetry(python:${python_version})%f "
+### Function to automatically activate Python environment based on project type
+pyenv_auto_use() {
+    # Check if we're in a Python project with a specific environment setup
+    if [ -f "pyproject.toml" ]; then
+        if [ -f "poetry.lock" ]; then
+            # Use Poetry environment if poetry.lock is present
+            poetry shell >/dev/null 2>&1  # Suppress output
+            local python_version
+            python_version=$(python --version 2>&1 | awk '{print $2}')
+            export virtual_environment="poetry(python:$python_version) "
+        elif [ -d "venv" ] || [ -d ".venv" ]; then
+            # Use local venv if no Poetry, but venv or .venv directory is present
+            source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate"
+            local python_version
+            python_version=$(python --version 2>&1 | awk '{print $2}')
+            export virtual_environment="python:$python_version "
+        fi
+    elif [ -d "venv" ] || [ -d ".venv" ]; then
+        # If it's not a pyproject.toml project, activate venv directly
+        source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate"
+        local python_version
+        python_version=$(python --version 2>&1 | awk '{print $2}')
+        export virtual_environment="python:$python_version"
     else
-      env_info+="%F{221}python:${python_version}%f "
+        # If no specific environment, default to system Python and clear virtual_environment
+        pyenv global system
+        export virtual_environment=""
     fi
-  fi
-
-  echo $env_info
 }
+
+### Automatically call pyenv_auto_use when entering a directory
+autoload -U add-zsh-hook
+add-zsh-hook chpwd pyenv_auto_use  # Calls pyenv_auto_use on directory change
+pyenv_auto_use  # Ensures function runs in current directory upon shell start
+
+# -----------------------------------------------------------------------------
+# ENVIRONMENT AUTOMATION
+# -----------------------------------------------------------------------------
+
+### Function to manage virtual environment activation and deactivation
+manage_environment() {
+    # Deactivate any active virtual environment first
+    if [ -n "$VIRTUAL_ENV" ]; then
+        deactivate 2>/dev/null  # Deactivates Python venv
+    elif [ -n "$POETRY_ACTIVE" ]; then
+        exit 2>/dev/null  # Exits Poetry subshell if active
+    fi
+    
+    # Initialize virtual_environment variable
+    export virtual_environment=""
+
+    # Check for Node.js project and set Node version
+    if [ -f "package.json" ]; then
+        nvm_auto_use
+    fi
+
+    # Check for Python project and set Python environment
+    if [ -f "pyproject.toml" ] || [ -d "venv" ] || [ -d ".venv" ]; then
+        pyenv_auto_use
+    fi
+}
+
+### Automatically call manage_environment when entering a new directory
+autoload -U add-zsh-hook
+add-zsh-hook chpwd manage_environment  # Calls manage_environment on directory change
+manage_environment  # Ensures function runs in current directory upon shell start
 
 # GIT CONFIGURATION 
 
@@ -258,7 +183,9 @@ function parse_git_dirty() {
   fi
 }
 
-# PROMPT CONFIG
+# =============================================================================
+# PROMPT ENHANCEMENTS 
+# =============================================================================
 
 ## Enable prompt substitution
 setopt PROMPT_SUBST
@@ -271,10 +198,12 @@ function set_prompt_username() {
 ### Add Functions to the precmd Functions Array
 precmd_functions+=(set_prompt_username)
 
-### Finally Construct the Prompt
-PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f $(virtual_env_info)$(git_prompt_info)%B%F{white}%#%f%b '
+# Finally Construct the Prompt
+PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f %F{221}$virtual_environment$(git_prompt_info)%B%F{white}%#%f%b '
 
-# AUTOSUGGEST CONFIG
+# =============================================================================
+# COMPLETION SYSTEM & KEYBINDINGS
+# =============================================================================
 
 ## Check if zsh autosuggestions is NOT installed. If not, then install it:
 if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
@@ -308,3 +237,10 @@ COMPLETION_WAITING_DOTS="true"
 
 ## Finally Load and Initialize the Autosuggest Completion System
 autoload -Uz compinit && compinit
+
+# =============================================================================
+# FINAL INITIALIZATION
+# =============================================================================
+
+# Allow keystrokes 
+stty erase ^?
