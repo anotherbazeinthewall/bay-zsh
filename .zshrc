@@ -1,14 +1,18 @@
-# Disable keystrokes while script is running 
-stty -echo
-
 # =============================================================================
 # HOUSEKEEPING
 # =============================================================================
+
+# Disable keystrokes while script is running 
+stty -echo
 
 # UNSET PREXISTING VENVS
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
   unset VIRTUAL_ENV
 fi
+
+# Disable all forms of virtual env prompts
+export VIRTUAL_ENV_DISABLE_PROMPT=1
+unset VIRTUAL_ENV_NAME
 
 # Update terminal color settings 
 export TERM="xterm-256color"
@@ -84,9 +88,6 @@ eval "$(pyenv init -)"
 pyenv_auto_use() {
     # Initialize VIRTUAL_ENV_INFO as empty for Python
     local python_env=""
-
-    # Disable virtual env's custom prompt
-    export VIRTUAL_ENV_DISABLE_PROMPT=1
     
     # Check if we're in a Python project with a specific environment setup
     if [ -f "pyproject.toml" ]; then
@@ -148,7 +149,7 @@ pyenv_auto_use  # Ensures function runs in current directory upon shell start
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
-# ------pyenv_auto-----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 ### Function to manage virtual environment activation and deactivation
 manage_environment() {
