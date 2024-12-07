@@ -24,6 +24,7 @@ export COLORTERM="truecolor"
 # =============================================================================
 
 alias ls='ls -aG' # Show hidden files by default
+alias newpy='function _newpy() { poetry new $1 && cd $1 && poetry install && git init && touch .gitignore && echo "Project $1 created successfully!"; }; _newpy'
 
 # =============================================================================
 # PATH MANAGEMENT
