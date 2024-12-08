@@ -46,6 +46,24 @@ export PATH="$new_path"
 # ENVIRONMENT MANAGERS
 # =============================================================================
 
+### Helper function to find files in parent directories
+find_file_in_parents() {
+    local file_to_find="$1"
+    local current_dir="$PWD"
+    local previous_dir=""
+
+    while [[ "$current_dir" != "/" && "$current_dir" != "$previous_dir" ]]; do
+        if [[ -e "$current_dir/$file_to_find" ]]; then
+            echo "$current_dir"
+            return 0
+        fi
+        previous_dir="$current_dir"
+        current_dir="$(dirname "$current_dir")"
+    done
+
+    return 1  # File not found
+}
+
 # -----------------------------------------------------------------------------
 # NVM (Node Version Manager)
 # -----------------------------------------------------------------------------
@@ -57,23 +75,24 @@ export NVM_DIR="$HOME/.nvm"
 
 ### Function to load the appropriate Node.js version based on .nvmrc if present
 nvm_auto_use() {
-    if [ -f ".nvmrc" ]; then
-        local nvmrc_node_version
-        nvmrc_node_version=$(<.nvmrc)  # Reads the version from .nvmrc
-        if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
-            nvm use "$nvmrc_node_version" >/dev/null 2>&1  # Suppresses "Now using node..."
+    local project_dir=""
+    
+    # Search for package.json or .nvmrc in parent directories
+    if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
+        if [ -f "$project_dir/.nvmrc" ]; then
+            local nvmrc_node_version
+            nvmrc_node_version=$(<"$project_dir/.nvmrc")  # Reads the version from .nvmrc
+            if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
+                nvm use "$nvmrc_node_version" >/dev/null 2>&1
+            fi
+        else
+            nvm use default >/dev/null 2>&1
         fi
         export VIRTUAL_ENV_INFO="node:v$(node -v | tr -d 'v') "
     else
-        nvm use default >/dev/null 2>&1  # Suppresses "Now using node..."
-        export VIRTUAL_ENV_INFO="node:v$(node -v | tr -d 'v') "
+        export VIRTUAL_ENV_INFO=""
     fi
 }
-
-### Automatically call nvm_auto_use when entering a directory
-autoload -U add-zsh-hook
-add-zsh-hook chpwd nvm_auto_use  # Calls nvm_auto_use on directory change
-nvm_auto_use  # Ensures function runs in current directory upon shell start
 
 # -----------------------------------------------------------------------------
 # PYENV (Python Environment Manager)
@@ -87,66 +106,34 @@ eval "$(pyenv init -)"
 
 ### Function to automatically activate Python environment based on project type
 pyenv_auto_use() {
-    # Initialize VIRTUAL_ENV_INFO as empty for Python
-    local python_env=""
-    
-    # Check if we're in a Python project with a specific environment setup
-    if [ -f "pyproject.toml" ]; then
-        if [ -f "poetry.lock" ]; then
-            # Get Poetry env info and activate environment
-            if [ -z "$POETRY_ACTIVE" ]; then
-                # Get the poetry env path
-                local poetry_venv
-                poetry_venv=$(poetry env info --path 2>/dev/null)
-                if [ $? -eq 0 ] && [ -n "$poetry_venv" ]; then
-                    source "$poetry_venv/bin/activate" 2>/dev/null
-                fi
-            fi
-            
-            # Get version after activation
-            local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            if [ $? -eq 0 ]; then
-                python_env="poetry(%F{212}python:${python_version}%F{221}) "
-            else
-                python_env="poetry(python:unknown) "
-            fi
-        elif [ -d "venv" ] || [ -d ".venv" ]; then
-            # Use local venv if no Poetry, but venv or .venv directory is present
-            source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate" >/dev/null 2>&1
-            local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            if [ $? -eq 0 ]; then
-                python_env="python:${python_version} "
-            else
-                python_env="python:unknown "
-            fi
-        fi
-    elif [ -d "venv" ] || [ -d ".venv" ]; then
-        # If it's not a pyproject.toml project, activate venv directly
-        source "${PWD}/$( [ -d "venv" ] && echo "venv" || echo ".venv")/bin/activate" >/dev/null 2>&1
-        local python_version
-        python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-        if [ $? -eq 0 ]; then
-            python_env="python:${python_version} "
-        else
-            python_env="python:unknown "
-        fi
-    else
-        # If no specific environment, default to system Python
-        pyenv global system >/dev/null 2>&1
-    fi
-    
-    # Update the VIRTUAL_ENV_INFO variable only if we have a Python environment
-    if [ -n "$python_env" ]; then
-        export VIRTUAL_ENV_INFO="$python_env"
-    fi
-}
+    # Initialize VIRTUAL_ENV_INFO variable
+    export VIRTUAL_ENV_INFO=""
 
-### Automatically call pyenv_auto_use when entering a directory
-autoload -U add-zsh-hook
-add-zsh-hook chpwd pyenv_auto_use  # Calls pyenv_auto_use on directory change
-pyenv_auto_use  # Ensures function runs in current directory upon shell start
+    local project_dir=""
+    local python_env=""
+
+    # Search for pyproject.toml or poetry.lock in parent directories
+    if project_dir=$(find_file_in_parents "pyproject.toml") || project_dir=$(find_file_in_parents "poetry.lock"); then
+        if command -v poetry >/dev/null 2>&1; then
+            # Only set the Poetry environment info without activating shell
+            local python_version
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_env="poetry(%F{212}python:${python_version:-unknown}%F{221}) "
+        fi
+    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
+        local venv_dir
+        venv_dir="$project_dir/$( [ -d "$project_dir/venv" ] && echo "venv" || echo ".venv")"
+        
+        if [ -f "$venv_dir/bin/activate" ]; then
+            source "$venv_dir/bin/activate" >/dev/null 2>&1
+            local python_version
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_env="python:${python_version:-unknown} "
+        fi
+    fi
+
+    export VIRTUAL_ENV_INFO="$python_env"
+}
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
@@ -154,25 +141,47 @@ pyenv_auto_use  # Ensures function runs in current directory upon shell start
 
 ### Function to manage virtual environment activation and deactivation
 manage_environment() {
-    # Deactivate any active virtual environment first
-    if [ -n "$VIRTUAL_ENV" ]; then
-        deactivate 2>/dev/null  # Deactivates Python venv
-    elif [ -n "$POETRY_ACTIVE" ]; then
-        exit 2>/dev/null  # Exits Poetry subshell if active
-    fi
-    
     # Initialize VIRTUAL_ENV_INFO variable
     export VIRTUAL_ENV_INFO=""
+    
+    local node_info=""
+    local python_info=""
 
-    # Check for Node.js project and set Node version
-    if [ -f "package.json" ]; then
-        nvm_auto_use
+    # Check for Node.js project first
+    if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
+        if [ -f "$project_dir/.nvmrc" ]; then
+            local nvmrc_node_version
+            nvmrc_node_version=$(<"$project_dir/.nvmrc")
+            if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
+                nvm use "$nvmrc_node_version" >/dev/null 2>&1
+            fi
+        else
+            nvm use default >/dev/null 2>&1
+        fi
+        node_info="node:v$(node -v | tr -d 'v') "
     fi
 
-    # Check for Python project and set Python environment
-    if [ -f "pyproject.toml" ] || [ -d "venv" ] || [ -d ".venv" ]; then
-        pyenv_auto_use
+    # Then check for Python project
+    if project_dir=$(find_file_in_parents "pyproject.toml") || project_dir=$(find_file_in_parents "poetry.lock"); then
+        if command -v poetry >/dev/null 2>&1; then
+            local python_version
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_info="poetry(%F{212}python:${python_version:-unknown}%F{221}) "
+        fi
+    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
+        local venv_dir
+        venv_dir="$project_dir/$( [ -d "$project_dir/venv" ] && echo "venv" || echo ".venv")"
+        
+        if [ -f "$venv_dir/bin/activate" ]; then
+            source "$venv_dir/bin/activate" >/dev/null 2>&1
+            local python_version
+            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_info="python:${python_version:-unknown} "
+        fi
     fi
+
+    # Combine environment information
+    export VIRTUAL_ENV_INFO="${node_info}${python_info}"
 }
 
 ### Automatically call manage_environment when entering a new directory
