@@ -10,6 +10,11 @@ if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
   unset VIRTUAL_ENV
 fi
 
+# UNSET VIRTUAL_ENV_INFO
+if [[ -n "$VIRTUAL_ENV_INFO" ]]; then
+  unset VIRTUAL_ENV_INFO
+fi
+
 # Disable all forms of virtual env prompts
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 unset VIRTUAL_ENV_NAME
@@ -106,29 +111,40 @@ eval "$(pyenv init -)"
 
 ### Function to automatically activate Python environment based on project type
 pyenv_auto_use() {
-    # Initialize VIRTUAL_ENV_INFO variable
+    # Deactivate any currently active virtual environment
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        deactivate >/dev/null 2>&1 || true
+        unset VIRTUAL_ENV
+    fi
     export VIRTUAL_ENV_INFO=""
 
     local project_dir=""
     local python_env=""
 
-    # Search for pyproject.toml or poetry.lock in parent directories
+    # Check for Poetry-managed projects first
     if project_dir=$(find_file_in_parents "pyproject.toml") || project_dir=$(find_file_in_parents "poetry.lock"); then
         if command -v poetry >/dev/null 2>&1; then
-            # Only set the Poetry environment info without activating shell
-            local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            python_env="poetry(%F{212}python:${python_version:-unknown}%F{221}) "
+            local poetry_env
+            poetry_env=$(poetry env info --path 2>/dev/null)
+            if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
+                source "$poetry_env/bin/activate" >/dev/null 2>&1
+                local python_version
+                python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+                python_env="poetry(%F{212}python:${python_version}%F{221}) "
+            else
+                python_env=""  # No virtual environment exists; clear info
+            fi
         fi
+
+    # Check for non-Poetry venv directories
     elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
         local venv_dir
         venv_dir="$project_dir/$( [ -d "$project_dir/venv" ] && echo "venv" || echo ".venv")"
-        
         if [ -f "$venv_dir/bin/activate" ]; then
             source "$venv_dir/bin/activate" >/dev/null 2>&1
             local python_version
             python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            python_env="python:${python_version:-unknown} "
+            python_env="python:${python_version} "
         fi
     fi
 
@@ -141,13 +157,20 @@ pyenv_auto_use() {
 
 ### Function to manage virtual environment activation and deactivation
 manage_environment() {
-    # Initialize VIRTUAL_ENV_INFO variable
+    # Initialize environment info
     export VIRTUAL_ENV_INFO=""
-    
-    local node_info=""
-    local python_info=""
 
-    # Check for Node.js project first
+    # Deactivate previously active environments
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        deactivate >/dev/null 2>&1 || true
+        unset VIRTUAL_ENV
+    fi
+
+    # Python environment handling
+    pyenv_auto_use
+
+    # Node.js (NVM) environment handling (optional)
+    local node_info=""
     if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
         if [ -f "$project_dir/.nvmrc" ]; then
             local nvmrc_node_version
@@ -161,33 +184,14 @@ manage_environment() {
         node_info="node:v$(node -v | tr -d 'v') "
     fi
 
-    # Then check for Python project
-    if project_dir=$(find_file_in_parents "pyproject.toml") || project_dir=$(find_file_in_parents "poetry.lock"); then
-        if command -v poetry >/dev/null 2>&1; then
-            local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            python_info="poetry(%F{212}python:${python_version:-unknown}%F{221}) "
-        fi
-    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
-        local venv_dir
-        venv_dir="$project_dir/$( [ -d "$project_dir/venv" ] && echo "venv" || echo ".venv")"
-        
-        if [ -f "$venv_dir/bin/activate" ]; then
-            source "$venv_dir/bin/activate" >/dev/null 2>&1
-            local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            python_info="python:${python_version:-unknown} "
-        fi
-    fi
-
     # Combine environment information
-    export VIRTUAL_ENV_INFO="${node_info}${python_info}"
+    export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
 }
 
-### Automatically call manage_environment when entering a new directory
+# Automatically call `manage_environment` when entering a new directory
 autoload -U add-zsh-hook
-add-zsh-hook chpwd manage_environment  # Calls manage_environment on directory change
-manage_environment  # Ensures function runs in current directory upon shell start
+add-zsh-hook chpwd manage_environment
+manage_environment  # Ensure it runs on shell start
 
 # GIT CONFIGURATION 
 
