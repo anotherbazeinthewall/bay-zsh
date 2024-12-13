@@ -2,9 +2,6 @@
 # HOUSEKEEPING
 # =============================================================================
 
-# Disable keystrokes while script is running 
-stty -echo
-
 # UNSET PREXISTING VENVS
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
   unset VIRTUAL_ENV
@@ -288,6 +285,3 @@ autoload -Uz compinit && compinit
 # FINAL INITIALIZATION
 # =============================================================================
 
-# Enable keystrokes now that the script is done 
-stty echo
-clear
