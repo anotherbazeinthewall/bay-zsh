@@ -352,6 +352,9 @@ function set_prompt_username() {
     prompt_username="%F{78}%n%f"
 }
 
+# Add the precmd hook for username
+add-zsh-hook precmd set_prompt_username
+
 PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"%F{221}$VIRTUAL_ENV_INFO"}$(git_prompt_info)%B%F{white}%#%f%b '
 
 # =============================================================================
