@@ -2,7 +2,7 @@
 # HOUSEKEEPING
 # =============================================================================
 
-export DEBUG_ZSH=true  # Set to false to disable debug output
+export DEBUG_ZSH=false  # Set to false to disable debug output
 
 debug() {
     if [ "$DEBUG_ZSH" = true ]; then
