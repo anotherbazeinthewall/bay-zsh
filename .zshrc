@@ -138,6 +138,64 @@ get_python_version() {
     "$python_path" -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null
 }
 
+# Detect Python project type
+detect_python_project() {
+    local project_type=""
+    local project_dir=""
+    
+    if project_dir=$(find_file_in_parents "poetry.lock"); then
+        project_type="poetry"
+    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
+        project_type="venv"
+    fi
+    
+    if [[ -n "$project_type" ]]; then
+        echo "$project_type:$project_dir"
+    fi
+}
+
+# Get Poetry environment path
+get_poetry_env_path() {
+    local project_dir="$1"
+    local poetry_env=""
+    
+    if command -v poetry >/dev/null 2>&1; then
+        if ! poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" poetry env info --path 2>/dev/null); then
+            poetry_env=$(poetry env info --path 2>/dev/null)
+        fi
+    fi
+    
+    echo "$poetry_env"
+}
+
+# Get venv path
+get_venv_path() {
+    local project_dir="$1"
+    local venv_path=""
+    
+    if [ -d "$project_dir/venv" ]; then
+        venv_path="$project_dir/venv"
+    elif [ -d "$project_dir/.venv" ]; then
+        venv_path="$project_dir/.venv"
+    fi
+    
+    echo "$venv_path"
+}
+
+# Format environment info
+format_env_info() {
+    local type="$1"
+    local version="$2"
+    
+    case "$type" in
+        "poetry")
+            echo "poetry(%F{211}python:${version}%F{221}) "
+            ;;
+        "venv")
+            echo "python:${version} "
+            ;;
+    esac
+}
 
 pyenv_activate() {
     local project_dir=""
@@ -174,50 +232,43 @@ pyenv_activate() {
 pyenv_auto_use() {
     debug "Starting pyenv_auto_use"
     local python_env_info=""
-    local project_dir=""
     
-    if project_dir=$(find_file_in_parents "poetry.lock"); then
-        debug "Found Poetry project at: $project_dir"
-        if command -v poetry >/dev/null 2>&1; then
-            if [ -f "$project_dir/poetry.lock" ]; then
-                local poetry_env
-                debug "Getting Poetry environment path"
-                if ! poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" poetry env info --path 2>/dev/null); then
-                    poetry_env=$(poetry env info --path 2>/dev/null)
-                fi
-                
-                debug "Poetry environment path: $poetry_env"
+    local project_info=$(detect_python_project)
+    if [[ -n "$project_info" ]]; then
+        local project_type="${project_info%%:*}"
+        local project_dir="${project_info#*:}"
+        
+        debug "Found $project_type project at: $project_dir"
+        
+        local python_path=""
+        case "$project_type" in
+            "poetry")
+                local poetry_env=$(get_poetry_env_path "$project_dir")
                 if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
-                    local python_version
-                    python_version=$(get_python_version "$poetry_env/bin/python")
-                    debug "Python version: $python_version"
-                    if [[ -n "$python_version" ]]; then
-                        python_env_info="poetry(%F{211}python:${python_version}%F{221}) "
-                        debug "Set python_env_info: $python_env_info"
-                    fi
+                    python_path="$poetry_env/bin/python"
                 fi
+                ;;
+            "venv")
+                local venv_path=$(get_venv_path "$project_dir")
+                if [[ -n "$venv_path" ]]; then
+                    python_path="$venv_path/bin/python"
+                fi
+                ;;
+        esac
+        
+        if [[ -n "$python_path" ]]; then
+            local python_version=$(get_python_version "$python_path")
+            if [[ -n "$python_version" ]]; then
+                python_env_info=$(format_env_info "$project_type" "$python_version")
+                debug "Set python_env_info: $python_env_info"
             fi
         fi
-    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
-        debug "Found venv at: $project_dir"
-        local venv_path
-        if [ -d "$project_dir/venv" ]; then
-            venv_path="$project_dir/venv"
-        else
-            venv_path="$project_dir/.venv"
-        fi
-
-        if [ -f "$venv_path/bin/activate" ]; then
-            local python_version
-            python_version=$(get_python_version "$venv_path/bin/python")
-            debug "Python version: $python_version"
-            python_env_info="python:${python_version} "
-        fi
     fi
-
+    
     debug "Returning python_env_info: $python_env_info"
     echo "$python_env_info"
 }
+
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
@@ -238,33 +289,19 @@ manage_environment() {
     export MANAGING_ENVIRONMENT="true"
     
     # Check if we're in a Python project directory
+    local project_info=$(detect_python_project)
     local in_python_project=false
-    if find_file_in_parents "poetry.lock" >/dev/null 2>&1 || \
-       find_file_in_parents "venv" >/dev/null 2>&1 || \
-       find_file_in_parents ".venv" >/dev/null 2>&1; then
-        in_python_project=true
-    fi
+    [[ -n "$project_info" ]] && in_python_project=true
 
     # Special handling for VS Code
     if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
         debug "VS Code detected with VIRTUAL_ENV: $VIRTUAL_ENV"
         if $in_python_project; then
-            debug "In Python project, checking environment type"
-            # Check specifically for Poetry project
-            if find_file_in_parents "poetry.lock" >/dev/null 2>&1; then
-                debug "Poetry project detected"
-                local python_version=$(get_python_version)
-                if [[ -n "$python_version" ]]; then
-                    export VIRTUAL_ENV_INFO="poetry(%F{211}python:${python_version}%F{221}) "
-                    debug "Set Poetry environment info: $VIRTUAL_ENV_INFO"
-                fi
-            else
-                debug "Regular Python project detected"
-                local python_version=$(get_python_version)
-                if [[ -n "$python_version" ]]; then
-                    export VIRTUAL_ENV_INFO="python:${python_version} "
-                    debug "Set Python environment info: $VIRTUAL_ENV_INFO"
-                fi
+            local project_type="${project_info%%:*}"
+            local python_version=$(get_python_version)
+            if [[ -n "$python_version" ]]; then
+                export VIRTUAL_ENV_INFO=$(format_env_info "$project_type" "$python_version")
+                debug "Set $project_type environment info: $VIRTUAL_ENV_INFO"
             fi
         else
             debug "Left Python project directory, deactivating environment"
