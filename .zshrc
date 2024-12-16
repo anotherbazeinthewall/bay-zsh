@@ -1,17 +1,35 @@
-echo "Loading .ZSHRC..."
+export DEBUG_ZSH=false  # Set to false to disable debug output
+
+debug() {
+    if [ "$DEBUG_ZSH" = true ]; then
+        echo "DEBUG: $1" >&2
+    fi
+}
 
 # =============================================================================
 # HOUSEKEEPING
 # =============================================================================
 
+debug "\e[2;3mInitiating ZSH Run Commands... \e[0m"
+
+# Helper function to check if we're in VS Code
+is_vscode() {
+    [[ -n "$VSCODE_PID" ]] || [[ -n "$VSCODE_INJECTION" ]]
+}
+
+# Set sourcing flag if we're sourcing the file
+if [[ "${(%):-%N}" == ".zshrc" ]]; then
+    export SOURCING_ZSHRC="true"
+fi
+
 # UNSET PREXISTING VENVS
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
-  unset VIRTUAL_ENV
+    unset VIRTUAL_ENV
 fi
 
 # UNSET VIRTUAL_ENV_INFO
 if [[ -n "$VIRTUAL_ENV_INFO" ]]; then
-  unset VIRTUAL_ENV_INFO
+    unset VIRTUAL_ENV_INFO
 fi
 
 # Disable all forms of virtual env prompts
@@ -36,7 +54,7 @@ alias newpy='function _newpy() { poetry new $1 && cd $1 && poetry install && git
 
 export PATH="$HOME/.local/bin:$PATH"
 
-## Then, read the existing PATH, split it into individual entries, and iterate through each entry. If the entry is not already present in the new_path variable, append it to the end of new_path. Finally, update the new_path variable with the cleaned-up PATH.
+## Clean up PATH
 new_path=""
 while IFS= read -r path_entry; do
     if [[ ":$new_path:" != *":$path_entry:"* ]]; then
@@ -52,205 +70,303 @@ export PATH="$new_path"
 
 ### Helper function to find files in parent directories
 find_file_in_parents() {
-    local file_to_find="$1"
-    local current_dir="$PWD"
-    local previous_dir=""
-
-    while [[ "$current_dir" != "/" && "$current_dir" != "$previous_dir" ]]; do
-        if [[ -e "$current_dir/$file_to_find" ]]; then
-            echo "$current_dir"
+    local file="$1"
+    local dir="$PWD"
+    
+    while [ "$dir" != "/" ]; do
+        if [ -e "$dir/$file" ]; then
+            echo "$dir"
             return 0
         fi
-        previous_dir="$current_dir"
-        current_dir="$(dirname "$current_dir")"
+        dir="$(realpath "$dir"/..)"
     done
-
-    return 1  # File not found
+    
+    # One final check at root directory
+    if [ -e "/$file" ]; then
+        echo "/"
+        return 0
+    fi
+    
+    return 1
 }
 
 # -----------------------------------------------------------------------------
 # NVM (Node Version Manager)
 # -----------------------------------------------------------------------------
 
-### Set the NVM_DIR and PATH environment variables, then initialize nvm.
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Loads nvm bash_completion
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
-### Function to load the appropriate Node.js version based on .nvmrc if present
 nvm_auto_use() {
     local project_dir=""
+    local node_env_info=""
     
-    # Search for package.json or .nvmrc in parent directories
     if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
         if [ -f "$project_dir/.nvmrc" ]; then
             local nvmrc_node_version
-            nvmrc_node_version=$(<"$project_dir/.nvmrc")  # Reads the version from .nvmrc
+            nvmrc_node_version=$(<"$project_dir/.nvmrc")
             if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
                 nvm use "$nvmrc_node_version" >/dev/null 2>&1
             fi
         else
             nvm use default >/dev/null 2>&1
         fi
-        export VIRTUAL_ENV_INFO="node:v$(node -v | tr -d 'v') "
-    else
-        export VIRTUAL_ENV_INFO=""
+        node_env_info="node:v$(node -v | tr -d 'v') "
     fi
+    echo "$node_env_info"
 }
 
 # -----------------------------------------------------------------------------
 # PYENV (Python Environment Manager)
 # -----------------------------------------------------------------------------
 
-# Set the PYENV_ROOT and PATH environment variables, then initialize pyenv.
 export PYENV_ROOT="$HOME/.pyenv"
 [[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
 
-### Function to automatically activate Python environment based on project type
-pyenv_auto_use() {
-    # Deactivate any currently active virtual environment
-    if [[ -n "$VIRTUAL_ENV" ]]; then
-        deactivate >/dev/null 2>&1 || true
-        unset VIRTUAL_ENV
-    fi
-    export VIRTUAL_ENV_INFO=""
-
+pyenv_activate() {
     local project_dir=""
-    local python_env=""
-
-    # Check for Poetry-managed projects first
-    if project_dir=$(find_file_in_parents "pyproject.toml") || project_dir=$(find_file_in_parents "poetry.lock"); then
-        if command -v poetry >/dev/null 2>&1; then
+    
+    if project_dir=$(find_file_in_parents "peotry.lock"); then
+        if [ -f "$project_dir/poetry.lock" ]; then
             local poetry_env
-            poetry_env=$(poetry env info --path 2>/dev/null)
-            if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
-                source "$poetry_env/bin/activate" >/dev/null 2>&1
-                local python_version
-                python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-                python_env="poetry(%F{212}python:${python_version}%F{221}) "
-            else
-                python_env=""  # No virtual environment exists; clear info
+            if poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" timeout 2s poetry env info --path 2>/dev/null); then
+                if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
+                    debug "Activating Poetry environment at: $poetry_env"
+                    source "$poetry_env/bin/activate" >/dev/null 2>&1
+                    return
+                fi
             fi
         fi
-
-    # Check for non-Poetry venv directories
     elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
-        local venv_dir
-        venv_dir="$project_dir/$( [ -d "$project_dir/venv" ] && echo "venv" || echo ".venv")"
-        if [ -f "$venv_dir/bin/activate" ]; then
-            source "$venv_dir/bin/activate" >/dev/null 2>&1
+        debug "Activating venv"
+        local venv_path
+        if [ -d "$project_dir/venv" ]; then
+            venv_path="$project_dir/venv"
+        else
+            venv_path="$project_dir/.venv"
+        fi
+
+        if [ -f "$venv_path/bin/activate" ]; then
+            debug "Activating venv at: $venv_path"
+            source "$venv_path/bin/activate" >/dev/null 2>&1
+            return
+        fi
+    fi
+}
+
+pyenv_auto_use() {
+    debug "Starting pyenv_auto_use"
+    local python_env_info=""
+    local project_dir=""
+    
+    if project_dir=$(find_file_in_parents "pyproject.toml"); then
+        debug "Found Poetry project at: $project_dir"
+        if command -v poetry >/dev/null 2>&1; then
+            if [ -f "$project_dir/poetry.lock" ]; then
+                local poetry_env
+                debug "Getting Poetry environment path"
+                if poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" timeout 2s poetry env info --path 2>/dev/null); then
+                    debug "Poetry environment path: $poetry_env"
+                    if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
+                        local python_version
+                        python_version=$($poetry_env/bin/python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+                        debug "Python version: $python_version"
+                        python_env_info="poetry(python:${python_version}) "
+                    fi
+                fi
+            fi
+        fi
+    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
+        debug "Found venv at: $project_dir"
+        local venv_path
+        if [ -d "$project_dir/venv" ]; then
+            venv_path="$project_dir/venv"
+        else
+            venv_path="$project_dir/.venv"
+        fi
+
+        if [ -f "$venv_path/bin/activate" ]; then
             local python_version
-            python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
-            python_env="python:${python_version} "
+            python_version=$($venv_path/bin/python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            debug "Python version: $python_version"
+            python_env_info="python:${python_version} "
         fi
     fi
 
-    export VIRTUAL_ENV_INFO="$python_env"
+    echo "$python_env_info"
 }
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
 # -----------------------------------------------------------------------------
 
-### Function to manage virtual environment activation and deactivation
+# Modify the manage_environment function:
 manage_environment() {
-    # Initialize environment info
-    export VIRTUAL_ENV_INFO=""
-
-    # Deactivate previously active environments
-    if [[ -n "$VIRTUAL_ENV" ]]; then
-        deactivate >/dev/null 2>&1 || true
-        unset VIRTUAL_ENV
+    # Skip if we're sourcing .zshrc
+    if [[ "$SOURCING_ZSHRC" == "true" ]]; then
+        return
     fi
+    
+    # Use local variable for managing state
+    if [[ "$MANAGING_ENVIRONMENT" == "true" ]]; then
+        return
+    fi
+    
+    export MANAGING_ENVIRONMENT="true"
+    
+    # Check if we're in a Python project directory
+    local in_python_project=false
+    if find_file_in_parents "pyproject.toml" >/dev/null 2>&1 || \
+       find_file_in_parents "venv" >/dev/null 2>&1 || \
+       find_file_in_parents ".venv" >/dev/null 2>&1; then
+        in_python_project=true
+    fi
+    
+    # Special handling for VS Code
+    if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
+        if $in_python_project; then
+            debug "VS Code environment detected, preserving existing environment"
+            local python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            if [[ -n "$python_version" ]]; then
+                if [[ "$VIRTUAL_ENV" == *"poetry"* ]]; then
+                    export VIRTUAL_ENV_INFO="poetry(python:${python_version}) "
+                else
+                    export VIRTUAL_ENV_INFO="python:${python_version} "
+                fi
+            fi
+        else
+            debug "Left Python project directory, deactivating environment"
+            # Store the current VIRTUAL_ENV path
+            local current_venv="$VIRTUAL_ENV"
+            # Clear environment variables first
+            export VIRTUAL_ENV_INFO=""
+            unset VIRTUAL_ENV
+            # Then deactivate the environment
+            if [[ -f "$current_venv/bin/deactivate" ]]; then
+                source "$current_venv/bin/deactivate" >/dev/null 2>&1
+            fi
+        fi
+    else
+        # Regular environment handling
+        if [[ -n "$VIRTUAL_ENV" ]]; then
+            debug "Deactivating existing virtual environment"
+            local current_venv="$VIRTUAL_ENV"
+            unset VIRTUAL_ENV
+            if [[ -f "$current_venv/bin/deactivate" ]]; then
+                source "$current_venv/bin/deactivate" >/dev/null 2>&1
+            fi
+        fi
+        
+        # Python environment handling
+        debug "Handling Python environment"
+        local python_env_info=$(pyenv_auto_use)
+        debug "Python env info: $python_env_info"
 
-    # Python environment handling
-    pyenv_auto_use
-
-    # Node.js (NVM) environment handling
-    nvm_auto_use
-
-    # Combine environment information
-    export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
+        # Node.js environment handling
+        debug "Handling Node environment"
+        local node_env_info=$(nvm_auto_use)
+        debug "Node env info: $node_env_info"
+        
+        # Combine environment information
+        export VIRTUAL_ENV_INFO=""
+        if [[ -n "$python_env_info" ]]; then
+            debug "Adding Python info to prompt"
+            export VIRTUAL_ENV_INFO="$python_env_info"
+        fi
+        if [[ -n "$node_env_info" ]]; then
+            debug "Adding Node info to prompt"
+            export VIRTUAL_ENV_INFO="$VIRTUAL_ENV_INFO$node_env_info"
+        fi
+        
+        debug "Final VIRTUAL_ENV_INFO: $VIRTUAL_ENV_INFO"
+        
+        # Now activate the environment if needed
+        if [[ -n "$python_env_info" && -z "$VIRTUAL_ENV" ]]; then
+            pyenv_activate
+        fi
+    fi
+    
+    export MANAGING_ENVIRONMENT="false"
 }
 
-# Automatically call `manage_environment` when entering a new directory
+# Initial shell setup function
+shell_init() {
+    debug "Starting shell initialization"
+    
+    # Initialize environment without activation
+    export MANAGING_ENVIRONMENT="false"
+    manage_environment
+    
+    debug "Shell initialization complete"
+}
+
+# Set up hooks - use only chpwd
 autoload -U add-zsh-hook
 add-zsh-hook chpwd manage_environment
-manage_environment  # Ensure it runs on shell start
 
+
+# =============================================================================
 # GIT CONFIGURATION 
+# =============================================================================
 
-## Git Prompt Config
 ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git(%F{green}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
 ZSH_THEME_GIT_PROMPT_DIRTY="%F{116}) %F{78}*%f"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{116})"
 
-### Function to Display Git Info in the Prompt
 function git_prompt_info() {
-  ref=$(git symbolic-ref HEAD 2> /dev/null) || return
-  echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
+    ref=$(git symbolic-ref HEAD 2> /dev/null) || return
+    echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
 }
 
-### Function to Check if the Git Repo is Dirty
 function parse_git_dirty() {
-  local STATUS=''
-  local FLAGS
-  FLAGS=('--porcelain')
-  local CONFIG_HIDE_DIRTY=$(git config --get zsh.hide-dirty)
-  if [[ "$CONFIG_HIDE_DIRTY" != "1" ]]; then
-    if [[ $(git --version | awk '{print $3}' | cut -d. -f2) -gt 7 ]]; then
-      FLAGS+='--ignore-submodules=dirty'
+    local STATUS=''
+    local FLAGS=('--porcelain')
+    local CONFIG_HIDE_DIRTY=$(git config --get zsh.hide-dirty)
+    if [[ "$CONFIG_HIDE_DIRTY" != "1" ]]; then
+        if [[ $(git --version | awk '{print $3}' | cut -d. -f2) -gt 7 ]]; then
+            FLAGS+='--ignore-submodules=dirty'
+        fi
+        if [[ "$DISABLE_UNTRACKED_FILES_DIRTY" == "true" ]]; then
+            FLAGS+='--untracked-files=no'
+        fi
+        STATUS=$(command git status ${FLAGS} 2> /dev/null | tail -n1)
     fi
-    if [[ "$DISABLE_UNTRACKED_FILES_DIRTY" == "true" ]]; then
-      FLAGS+='--untracked-files=no'
+    if [[ -n $STATUS ]]; then
+        echo "$ZSH_THEME_GIT_PROMPT_DIRTY"
+    else
+        echo "$ZSH_THEME_GIT_PROMPT_CLEAN"
     fi
-    STATUS=$(command git status ${FLAGS} 2> /dev/null | tail -n1)
-  fi
-  if [[ -n $STATUS ]]; then
-    echo "$ZSH_THEME_GIT_PROMPT_DIRTY"
-  else
-    echo "$ZSH_THEME_GIT_PROMPT_CLEAN"
-  fi
 }
 
 # =============================================================================
 # PROMPT ENHANCEMENTS 
 # =============================================================================
 
-## Enable prompt substitution
 setopt PROMPT_SUBST
 
-### Function that sets up the username in the prompt
 function set_prompt_username() {
     prompt_username="%F{78}%n%f"
 }
 
-### Add Functions to the precmd Functions Array
-precmd_functions+=(set_prompt_username)
-
-# Finally Construct the Prompt
-PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f %F{221}$VIRTUAL_ENV_INFO$(git_prompt_info)%B%F{white}%#%f%b '
+PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"%F{221}$VIRTUAL_ENV_INFO"}$(git_prompt_info)%B%F{white}%#%f%b '
 
 # =============================================================================
 # COMPLETION SYSTEM & KEYBINDINGS
 # =============================================================================
 
-## Check if zsh autosuggestions is NOT installed. If not, then install it:
 if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
-  git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
+    git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
 fi
 
-## Turn on zsh-autosuggestions
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 
-## Remove Forward-Char From Autosuggest Accept Widgets
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#forward-char}")
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#vi-forward-char}")
 
-## Define custom widget to accept one character of suggestion
 autosuggest_partial_charwise() {
     if [[ -n $LBUFFER && -n $RBUFFER ]]; then
         BUFFER=$LBUFFER${RBUFFER[1]}${RBUFFER[2,-1]}
@@ -259,20 +375,20 @@ autosuggest_partial_charwise() {
 }
 zle -N autosuggest_partial_charwise
 
-## Autosuggest Keybindings
-bindkey '^[[C' autosuggest_partial_charwise # Bind the Right Arrow key to accept suggestion
-bindkey '^I' autosuggest-accept # Bind the Tab key to accept suggestion
-bindkey '^E' forward-word # Bind 
+bindkey '^[[C' autosuggest_partial_charwise
+bindkey '^I' autosuggest-accept
+bindkey '^E' forward-word
 
-## Autosuggest Options
 ENABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
 
-## Finally Load and Initialize the Autosuggest Completion System
 autoload -Uz compinit && compinit
 
 # =============================================================================
 # FINAL INITIALIZATION
 # =============================================================================
 
-echo "Successfully loaded ZSHRC" 
+# Perform initial shell setup
+shell_init
+
+debug "\e[1;3;32mSuccessfully loaded ZSH Run Commands!\e[0m"
