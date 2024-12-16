@@ -90,44 +90,6 @@ find_file_in_parents() {
     return 1
 }
 
-# -----------------------------------------------------------------------------
-# NVM (Node Version Manager)
-# -----------------------------------------------------------------------------
-
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
-nvm_auto_use() {
-    local project_dir=""
-    local node_env_info=""
-    
-    if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
-        if [ -f "$project_dir/.nvmrc" ]; then
-            local nvmrc_node_version
-            nvmrc_node_version=$(<"$project_dir/.nvmrc")
-            if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
-                nvm use "$nvmrc_node_version" >/dev/null 2>&1
-            fi
-        else
-            nvm use default >/dev/null 2>&1
-        fi
-        node_env_info="node:v$(node -v | tr -d 'v') "
-    fi
-    echo "$node_env_info"
-}
-
-# -----------------------------------------------------------------------------
-# PYENV (Python Environment Manager)
-# -----------------------------------------------------------------------------
-
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv init -)"
-
-# ... existing code ...
-
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -257,6 +219,111 @@ activate_venv() {
     return 1
 }
 
+# Project detection system
+PROJECT_TYPE_POETRY="poetry"
+PROJECT_TYPE_VENV="venv"
+PROJECT_TYPE_NODE="node"
+
+detect_project_type() {
+    local dir="$1"
+    local markers=(
+        "poetry.lock:$PROJECT_TYPE_POETRY"
+        "pyproject.toml:$PROJECT_TYPE_POETRY"
+        "venv:$PROJECT_TYPE_VENV"
+        ".venv:$PROJECT_TYPE_VENV"
+        "package.json:$PROJECT_TYPE_NODE"
+        ".nvmrc:$PROJECT_TYPE_NODE"
+    )
+    
+    debug "Detecting project type in directory: $dir"
+    
+    for marker in "${markers[@]}"; do
+        local file="${marker%%:*}"
+        local type="${marker#*:}"
+        
+        if [[ -e "$dir/$file" ]]; then
+            debug "Found $type project marker: $file"
+            echo "$type"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+find_project_root() {
+    local type="$1"
+    local current_dir="$PWD"
+    
+    debug "Finding project root for type: $type"
+    
+    case "$type" in
+        "$PROJECT_TYPE_POETRY")
+            find_file_in_parents "poetry.lock" || find_file_in_parents "pyproject.toml"
+            ;;
+        "$PROJECT_TYPE_VENV")
+            find_file_in_parents "venv" || find_file_in_parents ".venv"
+            ;;
+        "$PROJECT_TYPE_NODE")
+            find_file_in_parents "package.json" || find_file_in_parents ".nvmrc"
+            ;;
+        *)
+            debug "Unknown project type: $type"
+            return 1
+            ;;
+    esac
+}
+
+get_project_info() {
+    local dir="${1:-$PWD}"
+    local project_types=()
+    local project_info=""
+    
+    debug "Getting project info for directory: $dir"
+    
+    # Check for Python projects
+    if project_dir=$(find_file_in_parents "poetry.lock") || \
+       project_dir=$(find_file_in_parents "pyproject.toml"); then
+        project_types+=("$PROJECT_TYPE_POETRY")
+    elif project_dir=$(find_file_in_parents "venv") || \
+         project_dir=$(find_file_in_parents ".venv"); then
+        project_types+=("$PROJECT_TYPE_VENV")
+    fi
+    
+    # Check for Node.js projects
+    if project_dir=$(find_file_in_parents "package.json") || \
+       project_dir=$(find_file_in_parents ".nvmrc"); then
+        project_types+=("$PROJECT_TYPE_NODE")
+    fi
+    
+    # Format project info
+    for type in "${project_types[@]}"; do
+        local root=$(find_project_root "$type")
+        if [[ -n "$root" ]]; then
+            [[ -n "$project_info" ]] && project_info+=";"
+            project_info+="${type}:${root}"
+        fi
+    done
+    
+    if [[ -n "$project_info" ]]; then
+        debug "Found project info: $project_info"
+        echo "$project_info"
+        return 0
+    fi
+    
+    debug "No project found"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# PYENV (Python Environment Manager)
+# -----------------------------------------------------------------------------
+
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
+
 pyenv_activate() {
     local project_dir=""
     
@@ -324,11 +391,48 @@ pyenv_auto_use() {
     echo "$python_env_info"
 }
 
+# -----------------------------------------------------------------------------
+# NVM (Node Version Manager)
+# -----------------------------------------------------------------------------
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+nvm_auto_use() {
+    local node_env_info=""
+    local project_info=$(get_project_info)
+    
+    if [[ -n "$project_info" ]]; then
+        IFS=';' read -A project_entries <<< "$project_info"
+        for entry in "${project_entries[@]}"; do
+            local type="${entry%%:*}"
+            local root="${entry#*:}"
+            
+            if [[ "$type" == "$PROJECT_TYPE_NODE" ]]; then
+                if [ -f "$root/.nvmrc" ]; then
+                    local nvmrc_node_version
+                    nvmrc_node_version=$(<"$root/.nvmrc")
+                    if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
+                        nvm use "$nvmrc_node_version" >/dev/null 2>&1
+                    fi
+                else
+                    nvm use default >/dev/null 2>&1
+                fi
+                node_env_info="node:v$(node -v | tr -d 'v') "
+                break
+            fi
+        done
+    fi
+    
+    echo "$node_env_info"
+}
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT AUTOMATION
 # -----------------------------------------------------------------------------
 
+# Modify the manage_environment function:
 # Modify the manage_environment function:
 manage_environment() {
     if [[ "$MANAGING_ENVIRONMENT" == "true" ]]; then
@@ -337,74 +441,81 @@ manage_environment() {
     
     export MANAGING_ENVIRONMENT="true"
     
-    # Check if we're in a Python project directory
-    local in_python_project=false
-    if find_file_in_parents "poetry.lock" >/dev/null 2>&1 || \
-       find_file_in_parents "venv" >/dev/null 2>&1 || \
-       find_file_in_parents ".venv" >/dev/null 2>&1; then
-        in_python_project=true
-    fi
-
-    # Special handling for VS Code
-    if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
-        debug "VS Code detected with VIRTUAL_ENV: $VIRTUAL_ENV"
-        if $in_python_project; then
-            debug "In Python project, checking environment type"
-            if find_file_in_parents "poetry.lock" >/dev/null 2>&1; then
-                debug "Poetry project detected"
-                local python_version=$(get_python_version)
-                if [[ -n "$python_version" ]]; then
-                    export VIRTUAL_ENV_INFO="poetry(%F{211}python:${python_version}%F{221}) "
-                    debug "Set Poetry environment info: $VIRTUAL_ENV_INFO"
-                fi
-            else
-                debug "Regular Python project detected"
-                local python_version=$(get_python_version)
-                if [[ -n "$python_version" ]]; then
-                    export VIRTUAL_ENV_INFO="python:${python_version} "
-                    debug "Set Python environment info: $VIRTUAL_ENV_INFO"
-                fi
-            fi
-        else
-            debug "Left Python project directory, deactivating environment"
-            deactivate_venv "$VIRTUAL_ENV"
-        fi
-    else
-        # Regular environment handling
+    local project_info=$(get_project_info)
+    debug "Project info: $project_info"
+    
+    # Clear environment info by default
+    local env_info=""
+    
+    # Deactivate existing environments if we're not in a project directory
+    if [[ -z "$project_info" ]]; then
+        debug "No project detected, cleaning up environments"
         if [[ -n "$VIRTUAL_ENV" ]]; then
-            debug "Deactivating existing virtual environment"
+            debug "Deactivating Python virtual environment"
             deactivate_venv "$VIRTUAL_ENV"
         fi
-        
-        # Python environment handling
-        debug "Handling Python environment"
-        local python_env_info=$(pyenv_auto_use)
-        debug "Python env info: $python_env_info"
-
-        # Node.js environment handling
-        debug "Handling Node environment"
-        local node_env_info=$(nvm_auto_use)
-        debug "Node env info: $node_env_info"
-        
-        # Combine environment information
+        # Reset Node version to default if we were in a Node project
+        if [[ -n "$VIRTUAL_ENV_INFO" ]] && [[ "$VIRTUAL_ENV_INFO" == *"node:"* ]]; then
+            debug "Resetting Node version to default"
+            nvm use default >/dev/null 2>&1
+        fi
         export VIRTUAL_ENV_INFO=""
-        if [[ -n "$python_env_info" ]]; then
-            debug "Adding Python info to prompt"
-            export VIRTUAL_ENV_INFO="$python_env_info"
-        fi
-        if [[ -n "$node_env_info" ]]; then
-            debug "Adding Node info to prompt"
-            export VIRTUAL_ENV_INFO="$VIRTUAL_ENV_INFO$node_env_info"
+    else
+        # Special handling for VS Code
+        if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
+            debug "VS Code detected with VIRTUAL_ENV: $VIRTUAL_ENV"
+            
+            # Handle each project type
+            IFS=';' read -A project_entries <<< "$project_info"
+            for entry in "${project_entries[@]}"; do
+                local type="${entry%%:*}"
+                local root="${entry#*:}"
+                
+                case "$type" in
+                    "$PROJECT_TYPE_POETRY"|"$PROJECT_TYPE_VENV")
+                        local python_version=$(get_python_version)
+                        if [[ -n "$python_version" ]]; then
+                            env_info+=$(format_env_info "$type" "$python_version")
+                            debug "Set $type environment info: $env_info"
+                        fi
+                        ;;
+                esac
+            done
+        else
+            # Regular environment handling
+            if [[ -n "$VIRTUAL_ENV" ]]; then
+                debug "Deactivating existing virtual environment"
+                deactivate_venv "$VIRTUAL_ENV"
+            fi
+            
+            # Handle each project type
+            IFS=';' read -A project_entries <<< "$project_info"
+            for entry in "${project_entries[@]}"; do
+                local type="${entry%%:*}"
+                local root="${entry#*:}"
+                
+                case "$type" in
+                    "$PROJECT_TYPE_POETRY"|"$PROJECT_TYPE_VENV")
+                        local python_env_info=$(pyenv_auto_use)
+                        [[ -n "$python_env_info" ]] && env_info+="$python_env_info"
+                        ;;
+                    "$PROJECT_TYPE_NODE")
+                        local node_env_info=$(nvm_auto_use)
+                        [[ -n "$node_env_info" ]] && env_info+="$node_env_info"
+                        ;;
+                esac
+            done
+            
+            # Now activate Python environment if needed
+            if [[ "$env_info" == *"python:"* ]] && [[ -z "$VIRTUAL_ENV" ]]; then
+                pyenv_activate
+            fi
         fi
         
-        debug "Final VIRTUAL_ENV_INFO: $VIRTUAL_ENV_INFO"
-        
-        # Now activate the environment if needed
-        if [[ -n "$python_env_info" && -z "$VIRTUAL_ENV" ]]; then
-            pyenv_activate
-        fi
+        export VIRTUAL_ENV_INFO="$env_info"
     fi
     
+    debug "Final VIRTUAL_ENV_INFO: $VIRTUAL_ENV_INFO"
     export MANAGING_ENVIRONMENT="false"
 }
 
