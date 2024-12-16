@@ -126,6 +126,19 @@ export PYENV_ROOT="$HOME/.pyenv"
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
 
+# ... existing code ...
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+# Gets Python version from a specific Python interpreter
+get_python_version() {
+    local python_path="${1:-python}"  # Default to 'python' if no path provided
+    "$python_path" -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null
+}
+
+
 pyenv_activate() {
     local project_dir=""
     
@@ -169,7 +182,6 @@ pyenv_auto_use() {
             if [ -f "$project_dir/poetry.lock" ]; then
                 local poetry_env
                 debug "Getting Poetry environment path"
-                # Add more robust Poetry environment detection
                 if ! poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" poetry env info --path 2>/dev/null); then
                     poetry_env=$(poetry env info --path 2>/dev/null)
                 fi
@@ -177,7 +189,7 @@ pyenv_auto_use() {
                 debug "Poetry environment path: $poetry_env"
                 if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
                     local python_version
-                    python_version=$($poetry_env/bin/python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+                    python_version=$(get_python_version "$poetry_env/bin/python")
                     debug "Python version: $python_version"
                     if [[ -n "$python_version" ]]; then
                         python_env_info="poetry(%F{211}python:${python_version}%F{221}) "
@@ -197,7 +209,7 @@ pyenv_auto_use() {
 
         if [ -f "$venv_path/bin/activate" ]; then
             local python_version
-            python_version=$($venv_path/bin/python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+            python_version=$(get_python_version "$venv_path/bin/python")
             debug "Python version: $python_version"
             python_env_info="python:${python_version} "
         fi
@@ -232,8 +244,7 @@ manage_environment() {
        find_file_in_parents ".venv" >/dev/null 2>&1; then
         in_python_project=true
     fi
-    
-    # Special handling for VS Code
+
     # Special handling for VS Code
     if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
         debug "VS Code detected with VIRTUAL_ENV: $VIRTUAL_ENV"
@@ -242,14 +253,14 @@ manage_environment() {
             # Check specifically for Poetry project
             if find_file_in_parents "poetry.lock" >/dev/null 2>&1; then
                 debug "Poetry project detected"
-                local python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+                local python_version=$(get_python_version)
                 if [[ -n "$python_version" ]]; then
                     export VIRTUAL_ENV_INFO="poetry(%F{211}python:${python_version}%F{221}) "
                     debug "Set Poetry environment info: $VIRTUAL_ENV_INFO"
                 fi
             else
                 debug "Regular Python project detected"
-                local python_version=$(python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null)
+                local python_version=$(get_python_version)
                 if [[ -n "$python_version" ]]; then
                     export VIRTUAL_ENV_INFO="python:${python_version} "
                     debug "Set Python environment info: $VIRTUAL_ENV_INFO"
