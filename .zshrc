@@ -1,3 +1,7 @@
+# =============================================================================
+# HOUSEKEEPING
+# =============================================================================
+
 export DEBUG_ZSH=true  # Set to false to disable debug output
 
 debug() {
@@ -5,10 +9,6 @@ debug() {
         echo "DEBUG: $1" >&2
     fi
 }
-
-# =============================================================================
-# HOUSEKEEPING
-# =============================================================================
 
 debug "\e[2;3mInitiating ZSH Run Commands... \e[0m"
 
@@ -68,6 +68,11 @@ export PATH="$new_path"
 # ENVIRONMENT MANAGERS
 # =============================================================================
 
+
+# -----------------------------------------------------------------------------
+# ENV HELPER FUNCTIONS
+# -----------------------------------------------------------------------------
+
 ### Helper function to find files in parent directories
 find_file_in_parents() {
     local file="$1"
@@ -89,10 +94,6 @@ find_file_in_parents() {
     
     return 1
 }
-
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
 
 # Gets Python version from a specific Python interpreter
 get_python_version() {
@@ -316,7 +317,7 @@ get_project_info() {
 }
 
 # -----------------------------------------------------------------------------
-# PYENV (Python Environment Manager)
+# Python Environment
 # -----------------------------------------------------------------------------
 
 export PYENV_ROOT="$HOME/.pyenv"
@@ -376,7 +377,7 @@ handle_python_environment() {
 }
 
 # -----------------------------------------------------------------------------
-# NVM (Node Version Manager)
+# Node JS Environment Handling
 # -----------------------------------------------------------------------------
 
 export NVM_DIR="$HOME/.nvm"
@@ -411,12 +412,9 @@ handle_node_environment() {
 }
 
 # -----------------------------------------------------------------------------
-# ENVIRONMENT AUTOMATION
+# ENV AUTOMATION
 # -----------------------------------------------------------------------------
 
-# Modify the manage_environment function:
-# Modify the manage_environment function:
-# Modify manage_environment to use the consolidated function
 manage_environment() {
     if [[ "$MANAGING_ENVIRONMENT" == "true" ]]; then
         return
