@@ -1,3 +1,5 @@
+echo "Loading .ZSHRC..."
+
 # =============================================================================
 # HOUSEKEEPING
 # =============================================================================
@@ -166,20 +168,8 @@ manage_environment() {
     # Python environment handling
     pyenv_auto_use
 
-    # Node.js (NVM) environment handling (optional)
-    local node_info=""
-    if project_dir=$(find_file_in_parents "package.json") || project_dir=$(find_file_in_parents ".nvmrc"); then
-        if [ -f "$project_dir/.nvmrc" ]; then
-            local nvmrc_node_version
-            nvmrc_node_version=$(<"$project_dir/.nvmrc")
-            if [ "$(nvm current)" != "v$nvmrc_node_version" ]; then
-                nvm use "$nvmrc_node_version" >/dev/null 2>&1
-            fi
-        else
-            nvm use default >/dev/null 2>&1
-        fi
-        node_info="node:v$(node -v | tr -d 'v') "
-    fi
+    # Node.js (NVM) environment handling
+    nvm_auto_use
 
     # Combine environment information
     export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
@@ -285,3 +275,4 @@ autoload -Uz compinit && compinit
 # FINAL INITIALIZATION
 # =============================================================================
 
+echo "Successfully loaded ZSHRC" 
