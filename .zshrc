@@ -527,10 +527,23 @@ function set_prompt_username() {
     prompt_username="%F{78}%n%f"
 }
 
+# Add color formatting to VIRTUAL_ENV_INFO for the prompt
+function format_env_info_prompt() {
+    local env_info="$1"
+    if [[ "$env_info" = *"poetry(python:"* ]]; then
+        local prefix="poetry("
+        local content="${env_info#$prefix}"
+        content="${content%) }"
+        echo "%F{221}${prefix}%F{211}${content}%F{221})%f "
+    else
+        echo "$env_info"
+    fi
+}
+
 # Add the precmd hook for username
 add-zsh-hook precmd set_prompt_username
 
-PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"%F{221}$VIRTUAL_ENV_INFO"}$(git_prompt_info)%B%F{white}%#%f%b '
+PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(format_env_info_prompt "$VIRTUAL_ENV_INFO")"}$(git_prompt_info)%B%F{white}%#%f%b '
 
 # =============================================================================
 # COMPLETION SYSTEM & KEYBINDINGS
