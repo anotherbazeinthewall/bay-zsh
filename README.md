@@ -1,6 +1,6 @@
 # Bay-ZSH
 
-Bay-ZSH is my personal `.zshrc` setup designed to simplify and centralize shell configurations across multiple machines, making my environment consistent, portable, and easy to update without the hassle of manual syncing. By tracking changes with Git, Bay-ZSH keeps configurations in sync, making updates straightforward to push, pull, and roll back as needed. With automated environment management, each machine is always ready to go, and if you're looking for a straightforward, Git-based way to manage your shell, Bay-ZSH might work well for you, too!
+I started messing with my `.zshrc` as an exercise in shell scripting: what better way to get more comfortable in the terminal than customizing my shell experience and having to deal with all of the bugs that come along with it? I created this repo to track my progress and facilitate utilization across my multiple machines. And who knows??? Maybe someone else will find it useful too!
 
 ## Installation
 
@@ -35,8 +35,4 @@ Bay-ZSH is my personal `.zshrc` setup designed to simplify and centralize shell 
 
 ## Contributing
 
-This project is tailored for my own needs, but if you’d like to contribute or use it as a base for your own setup, go for it! Fork, customize, and share any improvements through a pull request if you’d like.
-
-## License
-
-Bay-ZSH is licensed under the MIT License. See the LICENSE file for details.
+This project is tailored for my own needs and fixations, but if you’d like to contribute or use it as a base for your own setup, go for it! Fork, customize, and share any improvements through a pull request if you’d like :) 
