@@ -197,34 +197,89 @@ format_env_info() {
     esac
 }
 
+# Virtual environment management helpers
+get_venv_path() {
+    local base_dir="$1"
+    local venv_name="${2:-}" # Optional specific venv name to look for
+    
+    debug "Searching for venv in: $base_dir"
+    
+    # List of possible venv locations/names to check
+    local venv_locations=(
+        "$base_dir/venv"
+        "$base_dir/.venv"
+        "${venv_name:+"$base_dir/$venv_name"}" # Only include if venv_name is provided
+    )
+    
+    # Check each possible location
+    for venv_path in "${venv_locations[@]}"; do
+        if [[ -n "$venv_path" && -d "$venv_path" && -f "$venv_path/bin/activate" ]]; then
+            debug "Found valid venv at: $venv_path"
+            echo "$venv_path"
+            return 0
+        fi
+    done
+    
+    debug "No valid venv found in $base_dir"
+    return 1
+}
+
+deactivate_venv() {
+    local current_venv="$1"
+    
+    if [[ -n "$current_venv" ]]; then
+        debug "Deactivating virtual environment: $current_venv"
+        # Clear environment variables first
+        export VIRTUAL_ENV_INFO=""
+        unset VIRTUAL_ENV
+        
+        # Then deactivate the environment
+        if [[ -f "$current_venv/bin/deactivate" ]]; then
+            source "$current_venv/bin/deactivate" >/dev/null 2>&1
+            debug "Virtual environment deactivated"
+            return 0
+        else
+            debug "No deactivate script found"
+            return 1
+        fi
+    fi
+    return 1
+}
+
+activate_venv() {
+    local venv_path="$1"
+    
+    if [[ -n "$venv_path" && -f "$venv_path/bin/activate" ]]; then
+        debug "Activating virtual environment: $venv_path"
+        source "$venv_path/bin/activate" >/dev/null 2>&1
+        return 0
+    fi
+    return 1
+}
+
 pyenv_activate() {
     local project_dir=""
     
     if project_dir=$(find_file_in_parents "poetry.lock"); then
-        # debug "Activating Poetry environment"
+        debug "Found Poetry project at: $project_dir"
         if [ -f "$project_dir/poetry.lock" ]; then
             local poetry_env
-            if poetry_env=$(POETRY_CACHE_DIR="$project_dir/.poetry-cache" timeout 2s poetry env info --path 2>/dev/null); then
-                if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
-                    debug "Activating Poetry environment at: $poetry_env"
-                    source "$poetry_env/bin/activate" >/dev/null 2>&1
+            if poetry_env=$(get_poetry_env_path "$project_dir"); then
+                if [[ -n "$poetry_env" ]]; then
+                    activate_venv "$poetry_env"
                     return
                 fi
             fi
         fi
-    elif project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv"); then
-        debug "Activating venv"
-        local venv_path
-        if [ -d "$project_dir/venv" ]; then
-            venv_path="$project_dir/venv"
-        else
-            venv_path="$project_dir/.venv"
-        fi
-
-        if [ -f "$venv_path/bin/activate" ]; then
-            debug "Activating venv at: $venv_path"
-            source "$venv_path/bin/activate" >/dev/null 2>&1
-            return
+    else
+        project_dir=$(find_file_in_parents "venv") || project_dir=$(find_file_in_parents ".venv")
+        if [[ -n "$project_dir" ]]; then
+            debug "Found standard venv project at: $project_dir"
+            local venv_path
+            if venv_path=$(get_venv_path "$project_dir"); then
+                activate_venv "$venv_path"
+                return
+            fi
         fi
     fi
 }
@@ -276,12 +331,6 @@ pyenv_auto_use() {
 
 # Modify the manage_environment function:
 manage_environment() {
-    # Remove the early return for sourcing
-    # if [[ "$SOURCING_ZSHRC" == "true" ]]; then
-    #     return
-    # fi
-    
-    # Use local variable for managing state
     if [[ "$MANAGING_ENVIRONMENT" == "true" ]]; then
         return
     fi
@@ -289,41 +338,42 @@ manage_environment() {
     export MANAGING_ENVIRONMENT="true"
     
     # Check if we're in a Python project directory
-    local project_info=$(detect_python_project)
     local in_python_project=false
-    [[ -n "$project_info" ]] && in_python_project=true
+    if find_file_in_parents "poetry.lock" >/dev/null 2>&1 || \
+       find_file_in_parents "venv" >/dev/null 2>&1 || \
+       find_file_in_parents ".venv" >/dev/null 2>&1; then
+        in_python_project=true
+    fi
 
     # Special handling for VS Code
     if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
         debug "VS Code detected with VIRTUAL_ENV: $VIRTUAL_ENV"
         if $in_python_project; then
-            local project_type="${project_info%%:*}"
-            local python_version=$(get_python_version)
-            if [[ -n "$python_version" ]]; then
-                export VIRTUAL_ENV_INFO=$(format_env_info "$project_type" "$python_version")
-                debug "Set $project_type environment info: $VIRTUAL_ENV_INFO"
+            debug "In Python project, checking environment type"
+            if find_file_in_parents "poetry.lock" >/dev/null 2>&1; then
+                debug "Poetry project detected"
+                local python_version=$(get_python_version)
+                if [[ -n "$python_version" ]]; then
+                    export VIRTUAL_ENV_INFO="poetry(%F{211}python:${python_version}%F{221}) "
+                    debug "Set Poetry environment info: $VIRTUAL_ENV_INFO"
+                fi
+            else
+                debug "Regular Python project detected"
+                local python_version=$(get_python_version)
+                if [[ -n "$python_version" ]]; then
+                    export VIRTUAL_ENV_INFO="python:${python_version} "
+                    debug "Set Python environment info: $VIRTUAL_ENV_INFO"
+                fi
             fi
         else
             debug "Left Python project directory, deactivating environment"
-            # Store the current VIRTUAL_ENV path
-            local current_venv="$VIRTUAL_ENV"
-            # Clear environment variables first
-            export VIRTUAL_ENV_INFO=""
-            unset VIRTUAL_ENV
-            # Then deactivate the environment
-            if [[ -f "$current_venv/bin/deactivate" ]]; then
-                source "$current_venv/bin/deactivate" >/dev/null 2>&1
-            fi
+            deactivate_venv "$VIRTUAL_ENV"
         fi
     else
         # Regular environment handling
         if [[ -n "$VIRTUAL_ENV" ]]; then
             debug "Deactivating existing virtual environment"
-            local current_venv="$VIRTUAL_ENV"
-            unset VIRTUAL_ENV
-            if [[ -f "$current_venv/bin/deactivate" ]]; then
-                source "$current_venv/bin/deactivate" >/dev/null 2>&1
-            fi
+            deactivate_venv "$VIRTUAL_ENV"
         fi
         
         # Python environment handling
