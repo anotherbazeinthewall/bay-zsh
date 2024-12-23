@@ -41,6 +41,9 @@ export TERM="xterm-256color"
 export ZSH_TMUX_FIXTERM=256
 export COLORTERM="truecolor"
 
+# Disable pychache 
+export PYTHONDONTWRITEBYTECODE=1
+
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
 # =============================================================================
