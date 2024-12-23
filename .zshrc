@@ -43,6 +43,8 @@ export COLORTERM="truecolor"
 
 # Disable pychache 
 export PYTHONDONTWRITEBYTECODE=1
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
 
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
