@@ -400,13 +400,12 @@ handle_node_environment() {
             nvm use "$nvmrc_node_version" >/dev/null 2>&1
         fi
     else
-        # If package.json exists but no .nvmrc, use default
         [ -f "$project_dir/package.json" ] && nvm use default >/dev/null 2>&1
     fi
     
-    # Get Node version if we're in a Node.js project
     if [ -f "$project_dir/package.json" ] || [ -f "$project_dir/.nvmrc" ]; then
-        env_info="node:v$(node -v | tr -d 'v') "
+        local node_version=$(node -v | tr -d 'v')
+        env_info=$(format_env_info "node" "$node_version")
         debug "Set node_env_info: $env_info"
     fi
     
