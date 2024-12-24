@@ -156,11 +156,11 @@ format_env_info() {
     local version="$2"
     
     case "$type" in
-        "poetry")
-            echo "poetry(python:${version}) "
+        "poetry"|"venv")
+            echo "python(${version}) "
             ;;
-        "venv")
-            echo "python:${version} "
+        "node")
+            echo "node(${version}) "
             ;;
     esac
 }
