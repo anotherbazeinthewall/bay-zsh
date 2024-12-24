@@ -533,12 +533,12 @@ function set_prompt_username() {
 # Add color formatting to VIRTUAL_ENV_INFO for the prompt
 function format_env_info_prompt() {
     local env_info="$1"
-    if [[ "$env_info" = *"poetry(python:"* ]]; then
-        local prefix="poetry("
-        local content="${env_info#$prefix}"
-        content="${content%) }"
-        echo "%F{221}${prefix}%F{211}${content}%F{221})%f "
-    else
+    if [[ -n "$env_info" ]]; then
+        # Replace python/node with colored versions
+        env_info="${env_info//python(/%F{221}python(%F{211}}"
+        env_info="${env_info//node(/%F{221}node(%F{211}}"
+        # Add closing parenthesis color
+        env_info="${env_info//)/%F{221})%f}"
         echo "$env_info"
     fi
 }
