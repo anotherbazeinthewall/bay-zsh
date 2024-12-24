@@ -339,14 +339,13 @@ handle_python_environment() {
     
     debug "Handling Python environment for directory: $project_dir"
     
-    # Try Poetry first
+    # Try Poetry first, then venv
     if [ -f "$project_dir/poetry.lock" ]; then
         env_type="poetry"
         local poetry_env=$(get_poetry_env_path "$project_dir")
         if [[ -n "$poetry_env" && -d "$poetry_env" ]]; then
             python_path="$poetry_env/bin/python"
         fi
-    # Then try standard venv
     elif [ -d "$project_dir/venv" ] || [ -d "$project_dir/.venv" ]; then
         env_type="venv"
         local venv_path=$(get_venv_path "$project_dir")
@@ -355,14 +354,12 @@ handle_python_environment() {
         fi
     fi
     
-    # If we found a Python environment, get its info and activate it
     if [[ -n "$python_path" ]]; then
         local python_version=$(get_python_version "$python_path")
         if [[ -n "$python_version" ]]; then
             env_info=$(format_env_info "$env_type" "$python_version")
             debug "Set python_env_info: $env_info"
             
-            # Activate the environment if not in VS Code or if no environment is active
             if ! is_vscode || [[ -z "$VIRTUAL_ENV" ]]; then
                 case "$env_type" in
                     "poetry")
