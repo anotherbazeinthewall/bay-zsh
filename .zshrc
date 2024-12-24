@@ -530,12 +530,14 @@ function set_prompt_username() {
 function format_env_info_prompt() {
     local env_info="$1"
     if [[ -n "$env_info" ]]; then
-        # Replace python/node with colored versions
-        env_info="${env_info//python(/%F{221}python(%F{211}}"
-        env_info="${env_info//node(/%F{221}node(%F{211}}"
-        # Add closing parenthesis color
-        env_info="${env_info//)/%F{221})%f}"
-        echo "$env_info"
+        # Split the string into parts and color them
+        if [[ "$env_info" =~ "(python|node)\((.*)\) " ]]; then
+            local env_type="${match[1]}"
+            local version="${match[2]}"
+            echo "%F{221}${env_type}(%F{211}${version}%F{221})%f "
+        else
+            echo "$env_info"
+        fi
     fi
 }
 
