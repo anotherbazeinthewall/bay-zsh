@@ -22,19 +22,19 @@ if [[ "${(%):-%N}" == ".zshrc" ]]; then
     export SOURCING_ZSHRC="true"
 fi
 
-# # UNSET PREXISTING ENVS
-# if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
-#     unset VIRTUAL_ENV
-# fi
+# UNSET PREXISTING ENVS
+if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
+    unset VIRTUAL_ENV
+fi
 
-# # UNSET VIRTUAL_ENV_INFO
-# if [[ -n "$VIRTUAL_ENV_INFO" ]]; then
-#     unset VIRTUAL_ENV_INFO
-# fi
+# UNSET VIRTUAL_ENV_INFO
+if [[ -n "$VIRTUAL_ENV_INFO" ]]; then
+    unset VIRTUAL_ENV_INFO
+fi
 
-# # Disable all forms of virtual env prompts
-# export VIRTUAL_ENV_DISABLE_PROMPT=1
-# unset VIRTUAL_ENV_NAME
+# Disable all forms of virtual env prompts
+export VIRTUAL_ENV_DISABLE_PROMPT=1
+unset VIRTUAL_ENV_NAME
 
 # Update terminal color settings 
 export TERM="xterm-256color"
@@ -43,8 +43,8 @@ export COLORTERM="truecolor"
 
 # Disable pychache 
 export PYTHONDONTWRITEBYTECODE=1
-# eval "$(pyenv init --path)"
-# eval "$(pyenv init -)"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
 
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
@@ -72,6 +72,10 @@ export PATH="$new_path"
 # =============================================================================
 # ENVIRONMENT MANAGEMENT
 # =============================================================================
+
+# Initialize NVM
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 
 # Helper function to find files in parent directories
 find_file_in_parents() {
@@ -150,20 +154,23 @@ handle_python_environment() {
 # Handle Node.js environment
 handle_node_environment() {
     local project_dir="$1"
-    
-    # Reset node info by default
     local node_info=""
     
-    if [ -f "$project_dir/.nvmrc" ]; then
-        nvm use >/dev/null 2>&1
-    elif [ -f "$project_dir/package.json" ]; then
-        nvm use default >/dev/null 2>&1
-    fi
-    
-    # Only show Node info if we're in a Node project
-    if [ -f "$project_dir/package.json" ] || [ -f "$project_dir/.nvmrc" ]; then
-        local node_version=$(node -v | tr -d 'v')
-        node_info=$(format_env_info "node" "$node_version")
+    # Only handle Node environment if we have node_modules or .nvmrc
+    if [ -d "$project_dir/node_modules" ] || [ -f "$project_dir/.nvmrc" ]; then
+        if [ -f "$project_dir/.nvmrc" ]; then
+            nvm use >/dev/null 2>&1
+        else
+            nvm use default >/dev/null 2>&1
+        fi
+        
+        if command -v node >/dev/null 2>&1; then
+            local node_version=$(node -v | tr -d 'v')
+            node_info=$(format_env_info "node" "$node_version")
+        fi
+    else
+        # If we're not in a Node project, clear the node info
+        node_info=""
     fi
     
     echo "$node_info"
@@ -177,7 +184,7 @@ manage_environment() {
     
     # Find project roots
     local python_root=$(find_file_in_parents "venv" || find_file_in_parents ".venv")
-    local node_root=$(find_file_in_parents "package.json" || find_file_in_parents ".nvmrc")
+    local node_root=$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")
     
     # Handle Python environment
     if [[ -n "$python_root" ]]; then
@@ -195,6 +202,9 @@ manage_environment() {
     # Update VIRTUAL_ENV_INFO to include Node info if present
     if [[ -n "$node_info" ]]; then
         export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
+    elif [[ -z "$python_root" ]]; then
+        # Clear VIRTUAL_ENV_INFO completely if we're not in any project
+        export VIRTUAL_ENV_INFO=""
     fi
     
     export MANAGING_ENVIRONMENT="false"
@@ -306,6 +316,6 @@ autoload -Uz compinit && compinit
 # =============================================================================
 
 # Perform initial shell setup
-shell_init
+# shell_init
 
 debug "\e[1;3;32mSuccessfully loaded ZSH Run Commands!\e[0m"
