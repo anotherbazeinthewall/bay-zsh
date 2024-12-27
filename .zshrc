@@ -2,7 +2,7 @@
 # HOUSEKEEPING
 # =============================================================================
 
-export DEBUG_ZSH=false  # Set to false to disable debug output
+export DEBUG_ZSH=true  # Set to false to disable debug output
 
 debug() {
     if [ "$DEBUG_ZSH" = true ]; then
@@ -14,7 +14,7 @@ debug "\e[2;3mInitiating ZSH Run Commands... \e[0m"
 
 # Helper function to check if we're in VS Code
 is_vscode() {
-    [[ -n "$VSCODE_PID" ]] || [[ -n "$VSCODE_INJECTION" ]]
+    [[ "$TERM_PROGRAM" == "vscode" ]] || [[ -n "$VSCODE_PID" ]] || [[ -n "$VSCODE_INJECTION" ]]
 }
 
 # Set sourcing flag if we're sourcing the file
@@ -50,12 +50,15 @@ eval "$(pyenv init -)"
 # ALIASES & CUSTOM FUNCTIONS
 # =============================================================================
 
+debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
+
 alias ls='ls -aG' # Show hidden files by default
 alias newpy='function _newpy() { poetry new $1 && cd $1 && poetry install && git init && touch .gitignore && echo "Project $1 created successfully!"; }; _newpy'
 
 # =============================================================================
 # PATH MANAGEMENT
 # =============================================================================
+debug "\e[2;3mConfiguring path management... \e[0m"
 
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -72,6 +75,7 @@ export PATH="$new_path"
 # =============================================================================
 # ENVIRONMENT MANAGEMENT
 # =============================================================================
+debug "\e[2;3mConfiguring environment management...\e[0m"
 
 # Initialize NVM
 export NVM_DIR="$HOME/.nvm"
@@ -82,14 +86,10 @@ find_file_in_parents() {
     local file="$1"
     local dir="$PWD"
     
-    while [ "$dir" != "/" ]; do
-        if [ -e "$dir/$file" ]; then
-            echo "$dir"
-            return 0
-        fi
-        dir="$(realpath "$dir"/..)"
+    while [[ "$dir" != "/" ]]; do
+        [[ -e "$dir/$file" ]] && echo "$dir" && return 0
+        dir=${dir:h}
     done
-    
     return 1
 }
 
@@ -119,19 +119,24 @@ get_venv_path() {
 
 deactivate_venv() {
     if [[ -n "$VIRTUAL_ENV" ]]; then
-        deactivate >/dev/null 2>&1
-        export VIRTUAL_ENV_INFO=""
-        unset VIRTUAL_ENV
+        debug "Deactivating venv: $VIRTUAL_ENV"
+        type deactivate >/dev/null 2>&1 && deactivate
+        unset VIRTUAL_ENV VIRTUAL_ENV_INFO
     fi
 }
 
 activate_venv() {
     local venv_path="$1"
-    
     if [[ -n "$venv_path" && -f "$venv_path/bin/activate" ]]; then
-        source "$venv_path/bin/activate" >/dev/null 2>&1
-        local python_version=$(get_python_version "$venv_path/bin/python")
-        export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
+        debug "Activating venv: $venv_path"
+        source "$venv_path/bin/activate"
+        if [[ $? -eq 0 ]]; then
+            local python_version=$(get_python_version "$venv_path/bin/python")
+            export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
+            debug "Activation successful: $VIRTUAL_ENV_INFO"
+        else
+            debug "Activation failed"
+        fi
     fi
 }
 
@@ -140,14 +145,21 @@ handle_python_environment() {
     local project_dir="$1"
     local venv_path=$(get_venv_path "$project_dir")
     
-    # If we found a venv and we're not in VS Code (or VS Code hasn't set VIRTUAL_ENV)
-    if [[ -n "$venv_path" ]]; then
-        if ! is_vscode || [[ -z "$VIRTUAL_ENV" ]]; then
-            activate_venv "$venv_path"
-        fi
-    else
-        # No venv found, deactivate if one is active
-        deactivate_venv
+    debug "handle_python_environment: project_dir=$project_dir venv_path=$venv_path"
+    
+    # Early return if no venv found
+    [[ -z "$venv_path" ]] && return
+    
+    # VS Code with active venv - just update info
+    if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
+        local python_version=$(get_python_version "$VIRTUAL_ENV/bin/python")
+        export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
+        return
+    fi
+    
+    # Activate venv if not in VS Code or VS Code without active venv
+    if ! is_vscode || [[ -z "$VIRTUAL_ENV" ]]; then
+        activate_venv "$venv_path"
     fi
 }
 
@@ -178,36 +190,32 @@ handle_node_environment() {
 
 # Main environment management function
 manage_environment() {
-    # Prevent recursive calls
-    [[ "$MANAGING_ENVIRONMENT" == "true" ]] && return
-    export MANAGING_ENVIRONMENT="true"
+    typeset -g ENVIRONMENT_MANAGEMENT_COUNT=${ENVIRONMENT_MANAGEMENT_COUNT:-0}
+    ((ENVIRONMENT_MANAGEMENT_COUNT > 1)) && return
+    
+    ((ENVIRONMENT_MANAGEMENT_COUNT++))
+    debug "Environment management level: $ENVIRONMENT_MANAGEMENT_COUNT"
     
     # Find project roots
     local python_root=$(find_file_in_parents "venv" || find_file_in_parents ".venv")
     local node_root=$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")
     
-    # Handle Python environment
-    if [[ -n "$python_root" ]]; then
-        handle_python_environment "$python_root"
-    else
-        deactivate_venv
-    fi
+    # Handle environments
+    [[ -n "$python_root" ]] && handle_python_environment "$python_root" || deactivate_venv
     
-    # Handle Node environment and get Node info for prompt
+    # Handle Node environment
     local node_info=""
-    if [[ -n "$node_root" ]]; then
-        node_info=$(handle_node_environment "$node_root")
-    fi
+    [[ -n "$node_root" ]] && node_info=$(handle_node_environment "$node_root")
     
-    # Update VIRTUAL_ENV_INFO to include Node info if present
+    # Update environment info
     if [[ -n "$node_info" ]]; then
         export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
     elif [[ -z "$python_root" ]]; then
-        # Clear VIRTUAL_ENV_INFO completely if we're not in any project
         export VIRTUAL_ENV_INFO=""
     fi
     
-    export MANAGING_ENVIRONMENT="false"
+    ((ENVIRONMENT_MANAGEMENT_COUNT--))
+    ((ENVIRONMENT_MANAGEMENT_COUNT == 0)) && unset ENVIRONMENT_MANAGEMENT_COUNT
 }
 
 # Set up directory change hook
@@ -220,6 +228,7 @@ manage_environment
 # =============================================================================
 # GIT CONFIGURATION 
 # =============================================================================
+debug "\e[2;3mConfiguring Git prompt...\e[0m"
 
 ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git(%F{green}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
@@ -255,6 +264,8 @@ function parse_git_dirty() {
 # PROMPT ENHANCEMENTS 
 # =============================================================================
 
+debug "\e[2;3mConfiguring prompt enhancements...\e[0m"
+
 setopt PROMPT_SUBST
 
 function set_prompt_username() {
@@ -284,6 +295,7 @@ PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(forma
 # =============================================================================
 # COMPLETION SYSTEM & KEYBINDINGS
 # =============================================================================
+debug "\e[2;3mConfiguring completion system and keybindings...\e[0m"
 
 if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
     git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
