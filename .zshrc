@@ -2,7 +2,7 @@
 # HOUSEKEEPING
 # =============================================================================
 
-export DEBUG_ZSH=true  # Set to false to disable debug output
+export DEBUG_ZSH=false  # Set to false to disable debug output
 
 debug() {
     if [ "$DEBUG_ZSH" = true ]; then
@@ -45,6 +45,10 @@ export COLORTERM="truecolor"
 export PYTHONDONTWRITEBYTECODE=1
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
+
+# PIPENV
+export PIPENV_VENV_IN_PROJECT=1
+export PIPENV_VERBOSITY=-1
 
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
