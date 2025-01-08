@@ -331,11 +331,14 @@ function forward_to_delimiter() {
         [[ $pos -le ${#suggestion} ]] && ((pos < min_pos)) && min_pos=$pos
     done
     
-    # Just move the cursor
+    # Move cursor and trigger proper highlighting
     if [[ $min_pos -le ${#suggestion} ]]; then
         CURSOR=$((CURSOR + min_pos + offset))
+        _zsh_autosuggest_highlight_reset
+        _zsh_autosuggest_highlight_apply
     else
         CURSOR=$((CURSOR + ${#POSTDISPLAY}))
+        _zsh_autosuggest_highlight_reset
     fi
 }
 
@@ -367,40 +370,19 @@ function backward_to_delimiter() {
     zle reset-prompt
 }
 
-function forward_char_with_suggestion() {
-    [[ -n $POSTDISPLAY ]] && {
-        LBUFFER+="${POSTDISPLAY[1]}"
-        RBUFFER="${POSTDISPLAY:1}"
-        POSTDISPLAY="${POSTDISPLAY:1}"
-    } || zle forward-char
-}
-
-function backward_char_with_suggestion() {
-    [[ $CURSOR -gt 0 ]] && {
-        # Add current character to suggestion
-        POSTDISPLAY="${LBUFFER[$CURSOR]}${POSTDISPLAY}"
-        # Remove character from buffer by truncating LBUFFER
-        LBUFFER="${LBUFFER:0:$((CURSOR-1))}"
-        # Clear RBUFFER to prevent unwanted text
-        RBUFFER=""
-    } || zle backward-char
-}
-
 function reset_saved_suggestion() { 
     _saved_postdisplay=""
 }
 
 # Initialize widgets
 for widget in forward_to_delimiter backward_to_delimiter \
-              forward_char_with_suggestion backward_char_with_suggestion \
-              reset_saved_suggestion; do
+            reset_saved_suggestion; do
     zle -N $widget
 done
 
 # Configure zsh-autosuggestions widgets
 typeset -ga ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
     forward_to_delimiter
-    forward_char_with_suggestion
     $ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
 )
 
@@ -411,8 +393,6 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
 # Key bindings
 bindkey '^I'   autosuggest-accept           # Tab
-bindkey '^[[C' forward_char_with_suggestion # Right arrow
-bindkey '^[[D' backward_char_with_suggestion # Left arrow
 bindkey '^E'   forward_to_delimiter         # Cmd+Right (Ctrl+E)
 bindkey '^A'   backward_to_delimiter        # Cmd+Left (Ctrl+A)
 
