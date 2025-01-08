@@ -300,64 +300,123 @@ PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(forma
 # COMPLETION SYSTEM & KEYBINDINGS
 # =============================================================================
 debug "\e[2;3mConfiguring completion system and keybindings...\e[0m"
-if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
+
+# Initialize zsh-autosuggestions
+[[ ! -d ~/.zsh/zsh-autosuggestions ]] && \
     git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
-fi
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 
-# Define our custom widget for handling delimiters (space, slash, colon)
+# Initialize storage variable
+typeset -g _saved_postdisplay=""
+
+# Delimiter functions
+local DELIMITERS=('/' ':' ' ')
+
 function forward_to_delimiter() {
-    if [[ -n $POSTDISPLAY ]]; then
-        # Skip leading delimiter if present
-        local suggestion=$POSTDISPLAY
-        if [[ $suggestion[1] == "/" || $suggestion[1] == ":" || $suggestion[1] == " " ]]; then
-            suggestion=${suggestion:1}
-            local offset=1
-        else
-            local offset=0
-        fi
-        
-        # Find position of each delimiter in the remaining text
-        local slash_pos=${suggestion[(i)/]}
-        local colon_pos=${suggestion[(i):]}
-        local space_pos=${suggestion[(i) ]}
-        
-        # Initialize minimum position to the length of suggestion + 1
-        local min_pos=$((${#suggestion} + 1))
-        
-        # Update min_pos if we find a closer delimiter
-        [[ $slash_pos -le ${#suggestion} ]] && min_pos=$((min_pos < slash_pos ? min_pos : slash_pos))
-        [[ $colon_pos -le ${#suggestion} ]] && min_pos=$((min_pos < colon_pos ? min_pos : colon_pos))
-        [[ $space_pos -le ${#suggestion} ]] && min_pos=$((min_pos < space_pos ? min_pos : space_pos))
-        
-        # If we found any delimiter, move to the closest one
-        if [[ $min_pos -le ${#suggestion} ]]; then
-            CURSOR=$((CURSOR + min_pos + offset))
-        else
-            # No delimiters found, move to end
-            CURSOR=$((CURSOR + ${#POSTDISPLAY}))
-        fi
+    [[ -z $POSTDISPLAY ]] && return
+    
+    local suggestion=$POSTDISPLAY
+    local offset=0
+    
+    # Check if starts with delimiter
+    [[ $suggestion[1] =~ [/:\ ] ]] && {
+        suggestion=${suggestion:1}
+        offset=1
+    }
+    
+    # Find closest delimiter
+    local min_pos=$((${#suggestion} + 1))
+    for delim in $DELIMITERS; do
+        local pos=${suggestion[(i)$delim]}
+        [[ $pos -le ${#suggestion} ]] && ((pos < min_pos)) && min_pos=$pos
+    done
+    
+    # Just move the cursor
+    if [[ $min_pos -le ${#suggestion} ]]; then
+        CURSOR=$((CURSOR + min_pos + offset))
+    else
+        CURSOR=$((CURSOR + ${#POSTDISPLAY}))
     fi
 }
-zle -N forward_to_delimiter
 
-# Configure which widgets partially accept suggestions
-typeset -ga ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
-ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
+function backward_to_delimiter() {
+    [[ $CURSOR -eq 0 ]] && return
+    
+    # Initialize or preserve suggestion
+    [[ -z "$_saved_postdisplay" ]] && _saved_postdisplay="$POSTDISPLAY"
+    
+    local last_pos=0
+    local text_before="$LBUFFER"
+    
+    # Find last delimiter
+    for ((i = CURSOR - 1; i > 0; i--)); do
+        [[ "${text_before[$i]}" =~ [/:\ ] ]] && {
+            last_pos=$i
+            break
+        }
+    done
+    
+    if ((last_pos > 0)); then
+        _saved_postdisplay="${LBUFFER:$last_pos:$((CURSOR-last_pos))}$_saved_postdisplay"
+        POSTDISPLAY="$_saved_postdisplay"
+        BUFFER="${LBUFFER[1,$last_pos]}"
+        CURSOR=$last_pos
+    else
+        BUFFER="" POSTDISPLAY="" _saved_postdisplay="" CURSOR=0
+    fi
+    zle reset-prompt
+}
+
+function forward_char_with_suggestion() {
+    [[ -n $POSTDISPLAY ]] && {
+        LBUFFER+="${POSTDISPLAY[1]}"
+        RBUFFER="${POSTDISPLAY:1}"
+        POSTDISPLAY="${POSTDISPLAY:1}"
+    } || zle forward-char
+}
+
+function backward_char_with_suggestion() {
+    [[ $CURSOR -gt 0 ]] && {
+        # Add current character to suggestion
+        POSTDISPLAY="${LBUFFER[$CURSOR]}${POSTDISPLAY}"
+        # Remove character from buffer by truncating LBUFFER
+        LBUFFER="${LBUFFER:0:$((CURSOR-1))}"
+        # Clear RBUFFER to prevent unwanted text
+        RBUFFER=""
+    } || zle backward-char
+}
+
+function reset_saved_suggestion() { 
+    _saved_postdisplay=""
+}
+
+# Initialize widgets
+for widget in forward_to_delimiter backward_to_delimiter \
+              forward_char_with_suggestion backward_char_with_suggestion \
+              reset_saved_suggestion; do
+    zle -N $widget
+done
+
+# Configure zsh-autosuggestions widgets
+typeset -ga ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
     forward_to_delimiter
+    forward_char_with_suggestion
     $ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
 )
 
-# Remove forward-char from accept widgets to prevent full acceptance
-typeset -ga ZSH_AUTOSUGGEST_ACCEPT_WIDGETS
+ZSH_AUTOSUGGEST_CLEAR_WIDGETS+=(reset_saved_suggestion)
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#forward-char}")
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#vi-forward-char}")
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
-# Bind keys
-bindkey '^E' forward_to_delimiter    # Cmd+Right (Ctrl+E)
-bindkey '^[[C' forward-char         # Right arrow (do nothing with suggestions)
-bindkey '^I' autosuggest-accept     # Tab
+# Key bindings
+bindkey '^I'   autosuggest-accept           # Tab
+bindkey '^[[C' forward_char_with_suggestion # Right arrow
+bindkey '^[[D' backward_char_with_suggestion # Left arrow
+bindkey '^E'   forward_to_delimiter         # Cmd+Right (Ctrl+E)
+bindkey '^A'   backward_to_delimiter        # Cmd+Left (Ctrl+A)
 
+# Enable completion system
 ENABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
 autoload -Uz compinit && compinit
