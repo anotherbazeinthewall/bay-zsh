@@ -300,38 +300,70 @@ PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(forma
 # COMPLETION SYSTEM & KEYBINDINGS
 # =============================================================================
 debug "\e[2;3mConfiguring completion system and keybindings...\e[0m"
-
 if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
     git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
 fi
-
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 
+# Define our custom widget for handling delimiters (space, slash, colon)
+function forward_to_delimiter() {
+    if [[ -n $POSTDISPLAY ]]; then
+        # Skip leading delimiter if present
+        local suggestion=$POSTDISPLAY
+        if [[ $suggestion[1] == "/" || $suggestion[1] == ":" || $suggestion[1] == " " ]]; then
+            suggestion=${suggestion:1}
+            local offset=1
+        else
+            local offset=0
+        fi
+        
+        # Find position of each delimiter in the remaining text
+        local slash_pos=${suggestion[(i)/]}
+        local colon_pos=${suggestion[(i):]}
+        local space_pos=${suggestion[(i) ]}
+        
+        # Initialize minimum position to the length of suggestion + 1
+        local min_pos=$((${#suggestion} + 1))
+        
+        # Update min_pos if we find a closer delimiter
+        [[ $slash_pos -le ${#suggestion} ]] && min_pos=$((min_pos < slash_pos ? min_pos : slash_pos))
+        [[ $colon_pos -le ${#suggestion} ]] && min_pos=$((min_pos < colon_pos ? min_pos : colon_pos))
+        [[ $space_pos -le ${#suggestion} ]] && min_pos=$((min_pos < space_pos ? min_pos : space_pos))
+        
+        # If we found any delimiter, move to the closest one
+        if [[ $min_pos -le ${#suggestion} ]]; then
+            CURSOR=$((CURSOR + min_pos + offset))
+        else
+            # No delimiters found, move to end
+            CURSOR=$((CURSOR + ${#POSTDISPLAY}))
+        fi
+    fi
+}
+zle -N forward_to_delimiter
+
+# Configure which widgets partially accept suggestions
+typeset -ga ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
+ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
+    forward_to_delimiter
+    $ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
+)
+
+# Remove forward-char from accept widgets to prevent full acceptance
+typeset -ga ZSH_AUTOSUGGEST_ACCEPT_WIDGETS
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#forward-char}")
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#vi-forward-char}")
 
-autosuggest_partial_charwise() {
-    if [[ -n $LBUFFER && -n $RBUFFER ]]; then
-        BUFFER=$LBUFFER${RBUFFER[1]}${RBUFFER[2,-1]}
-        CURSOR=$((CURSOR + 1))
-    fi
-}
-zle -N autosuggest_partial_charwise
-
-bindkey '^[[C' autosuggest_partial_charwise
-bindkey '^I' autosuggest-accept
-bindkey '^E' forward-word
+# Bind keys
+bindkey '^E' forward_to_delimiter    # Cmd+Right (Ctrl+E)
+bindkey '^[[C' forward-char         # Right arrow (do nothing with suggestions)
+bindkey '^I' autosuggest-accept     # Tab
 
 ENABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
-
 autoload -Uz compinit && compinit
 
 # =============================================================================
 # FINAL INITIALIZATION
 # =============================================================================
-
-# Perform initial shell setup
-# shell_init
 
 debug "\e[1;3;32mSuccessfully loaded ZSH Run Commands!\e[0m"
