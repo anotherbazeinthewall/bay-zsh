@@ -1,4 +1,4 @@
 # Ignore the usual stuff 
 .DS_Store
-backups/*
+backups/
 .archive/
