@@ -314,23 +314,23 @@ local DELIMITERS=('/' ':' ' ')
 
 function forward_to_delimiter() {
     [[ -z $POSTDISPLAY ]] && return
-    
+
     local suggestion=$POSTDISPLAY
     local offset=0
-    
+
     # Check if starts with delimiter
     [[ $suggestion[1] =~ [/:\ ] ]] && {
         suggestion=${suggestion:1}
         offset=1
     }
-    
+
     # Find closest delimiter
     local min_pos=$((${#suggestion} + 1))
     for delim in $DELIMITERS; do
         local pos=${suggestion[(i)$delim]}
         [[ $pos -le ${#suggestion} ]] && ((pos < min_pos)) && min_pos=$pos
     done
-    
+
     # Move cursor and trigger proper highlighting
     if [[ $min_pos -le ${#suggestion} ]]; then
         CURSOR=$((CURSOR + min_pos + offset))
@@ -340,17 +340,23 @@ function forward_to_delimiter() {
         CURSOR=$((CURSOR + ${#POSTDISPLAY}))
         _zsh_autosuggest_highlight_reset
     fi
+
+    # Ensure proper color state
+    region_highlight=()
+    region_highlight+=("0 ${#BUFFER} default") # White for BUFFER
+    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242") # Gray for POSTDISPLAY
+    zle -R
 }
 
 function backward_to_delimiter() {
     [[ $CURSOR -eq 0 ]] && return
-    
+
     # Initialize or preserve suggestion
     [[ -z "$_saved_postdisplay" ]] && _saved_postdisplay="$POSTDISPLAY"
-    
+
     local last_pos=0
     local text_before="$LBUFFER"
-    
+
     # Find last delimiter
     for ((i = CURSOR - 1; i > 0; i--)); do
         [[ "${text_before[$i]}" =~ [/:\ ] ]] && {
@@ -358,7 +364,7 @@ function backward_to_delimiter() {
             break
         }
     done
-    
+
     if ((last_pos > 0)); then
         _saved_postdisplay="${LBUFFER:$last_pos:$((CURSOR-last_pos))}$_saved_postdisplay"
         POSTDISPLAY="$_saved_postdisplay"
@@ -367,7 +373,12 @@ function backward_to_delimiter() {
     else
         BUFFER="" POSTDISPLAY="" _saved_postdisplay="" CURSOR=0
     fi
-    zle reset-prompt
+
+    # Ensure proper color state
+    region_highlight=()
+    region_highlight+=("0 ${#BUFFER} default") # White for BUFFER
+    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242") # Gray for POSTDISPLAY
+    zle -R
 }
 
 function reset_saved_suggestion() { 
