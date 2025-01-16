@@ -240,7 +240,11 @@ ZSH_THEME_GIT_PROMPT_DIRTY="%F{116}) %F{78}*%f"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{116})"
 
 function git_prompt_info() {
-    ref=$(git symbolic-ref HEAD 2> /dev/null) || return
+    # Try to get branch name first
+    ref=$(git symbolic-ref HEAD 2> /dev/null) || 
+    # If that fails (detached HEAD), get commit hash
+    ref=$(git rev-parse --short HEAD 2> /dev/null) || return
+    
     echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
 }
 
