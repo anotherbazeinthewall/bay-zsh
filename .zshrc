@@ -58,6 +58,7 @@ debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
 
 alias ls='ls -aG' # Show hidden files by default
 alias newpy='function _newpy() { poetry new $1 && cd $1 && poetry install && git init && touch .gitignore && echo "Project $1 created successfully!"; }; _newpy'
+alias snap='(tree && find . -type f -exec sh -c "echo -e \"\n=== File: {} ===\n\"; cat {}" \;) | tee >(pbcopy)'
 
 # =============================================================================
 # PATH MANAGEMENT
@@ -230,22 +231,31 @@ add-zsh-hook chpwd manage_environment
 manage_environment
 
 # =============================================================================
-# GIT CONFIGURATION 
+# GIT CONFIGURATION
 # =============================================================================
 debug "\e[2;3mConfiguring Git prompt...\e[0m"
 
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git(%F{green}"
+ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git("
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
 ZSH_THEME_GIT_PROMPT_DIRTY="%F{116}) %F{78}*%f"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{116})"
 
 function git_prompt_info() {
+    local branch_or_hash
+    local is_detached=false
+
     # Try to get branch name first
-    ref=$(git symbolic-ref HEAD 2> /dev/null) || 
-    # If that fails (detached HEAD), get commit hash
-    ref=$(git rev-parse --short HEAD 2> /dev/null) || return
-    
-    echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
+    if branch_or_hash=$(git symbolic-ref HEAD 2> /dev/null); then
+        # Remove refs/heads/ prefix and use green color for branch
+        branch_or_hash="%F{green}${branch_or_hash#refs/heads/}"
+    else
+        # If in detached HEAD, get commit hash and use purple color
+        branch_or_hash=$(git rev-parse --short HEAD 2> /dev/null) || return
+        is_detached=true
+        branch_or_hash="%F{magenta}${branch_or_hash}"
+    fi
+
+    echo "$ZSH_THEME_GIT_PROMPT_PREFIX${branch_or_hash}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
 }
 
 function parse_git_dirty() {
