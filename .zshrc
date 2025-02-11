@@ -57,8 +57,8 @@ export PIPENV_VERBOSITY=-1
 debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
 
 alias ls='ls -aG' # Show hidden files by default
-alias newpy='function _newpy() { poetry new $1 && cd $1 && poetry install && git init && touch .gitignore && echo "Project $1 created successfully!"; }; _newpy'
-alias snap='(tree && find . -type f -exec sh -c "echo -e \"\n=== File: {} ===\n\"; cat {}" \;) | tee >(pbcopy)'
+alias newpy='poetry init --no-interaction && poetry install --no-root && source ~/.zshrc'
+alias snap='(tree -I ".*" && find . -type f -not -path "*/\.*" -exec sh -c "echo -e \"\n=== File: {} ===\n\"; cat {}" \;) | tee >(pbcopy)'
 
 # =============================================================================
 # PATH MANAGEMENT
