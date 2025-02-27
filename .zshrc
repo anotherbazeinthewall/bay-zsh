@@ -57,7 +57,6 @@ export PIPENV_VERBOSITY=-1
 debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
 
 alias ls='ls -aG' # Show hidden files by default
-alias newpy='poetry init --no-interaction && poetry install --no-root && source ~/.zshrc'
 
 snap() {
     local dir=${1:-.}
