@@ -58,7 +58,11 @@ debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
 
 alias ls='ls -aG' # Show hidden files by default
 alias newpy='poetry init --no-interaction && poetry install --no-root && source ~/.zshrc'
-alias snap='(tree -I ".*" && find . -type f -not -path "*/\.*" -exec sh -c "echo -e \"\n=== File: {} ===\n\"; cat {}" \;) | tee >(pbcopy)'
+
+snap() {
+    local dir=${1:-.}
+    (cd "$dir" && echo "=== Current Path: $(pwd) ===" && echo && tree -I ".*" && find . -type f -not -path "*/\.*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;) | tee >(pbcopy)
+}
 
 # =============================================================================
 # PATH MANAGEMENT
