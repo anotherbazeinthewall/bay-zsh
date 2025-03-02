@@ -62,21 +62,31 @@ snap() {
     local dir=${1:-.}
     local exclude=""
     
-    # If second argument exists, use it as exclude pattern
+    # Set exclude pattern if provided
     if [[ -n "$2" ]]; then
-        exclude="$2"
+        exclude=$2
     fi
     
     (cd "$dir" && \
         echo "=== Current Path: $(pwd) ===" && \
         echo && \
-        # For tree command
-        if [[ -n "$exclude" ]]; then
-            tree -I ".*|$exclude"
-        else
-            tree -I ".*"
-        fi && \
-        # For find command
+        echo "=== Directory Structure ===" && \
+        # Simple directory listing using find and formatting
+        find . -type d -not -path "*/\.*" ${exclude:+-not -path "*/$exclude*"} | sort | \
+        awk '{
+            gsub(/[^\/]+\//, "  ", $0);
+            gsub(/\.\//, "", $0);
+            if (length($0) > 0) print "- " $0;
+        }' && \
+        echo && \
+        echo "=== Files ===" && \
+        find . -type f -not -path "*/\.*" ${exclude:+-not -path "*/$exclude*"} | sort | \
+        awk '{
+            gsub(/\.\//, "", $0);
+            print "- " $0;
+        }' && \
+        echo && \
+        # For file contents
         if [[ -n "$exclude" ]]; then
             find . -type f -not -path "*/\.*" -not -path "*/$exclude*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;
         else
