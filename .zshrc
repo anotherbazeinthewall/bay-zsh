@@ -60,7 +60,29 @@ alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --c
 
 snap() {
     local dir=${1:-.}
-    (cd "$dir" && echo "=== Current Path: $(pwd) ===" && echo && tree -I ".*" && find . -type f -not -path "*/\.*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;) | tee >(pbcopy)
+    local exclude=""
+    
+    # If second argument exists, use it as exclude pattern
+    if [[ -n "$2" ]]; then
+        exclude="$2"
+    fi
+    
+    (cd "$dir" && \
+        echo "=== Current Path: $(pwd) ===" && \
+        echo && \
+        # For tree command
+        if [[ -n "$exclude" ]]; then
+            tree -I ".*|$exclude"
+        else
+            tree -I ".*"
+        fi && \
+        # For find command
+        if [[ -n "$exclude" ]]; then
+            find . -type f -not -path "*/\.*" -not -path "*/$exclude*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;
+        else
+            find . -type f -not -path "*/\.*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;
+        fi) | \
+    tee >(pbcopy)
 }
 
 # =============================================================================
