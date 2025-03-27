@@ -60,19 +60,27 @@ alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --c
 
 snap() {
     local dir=${1:-.}
-    local exclude=""
     
-    # Set exclude pattern if provided
-    if [[ -n "$2" ]]; then
-        exclude=$2
+    # Check if we have at least one argument
+    if [[ $# -gt 0 ]]; then
+        # Shift to remove the first argument (directory)
+        shift
+        # The remaining args are exclude patterns
     fi
+    
+    local exclude_args=""
+    
+    # Build exclude arguments for find command
+    for pattern in "$@"; do
+        exclude_args="$exclude_args -not -path \"*/$pattern*\""
+    done
     
     (cd "$dir" && \
         echo "=== Current Path: $(pwd) ===" && \
         echo && \
         echo "=== Directory Structure ===" && \
-        # Simple directory listing using find and formatting
-        find . -type d -not -path "*/\.*" ${exclude:+-not -path "*/$exclude*"} | sort | \
+        # Using eval to process the exclude_args with multiple patterns
+        eval "find . -type d -not -path \"*/\.*\" $exclude_args" | sort | \
         awk '{
             gsub(/[^\/]+\//, "  ", $0);
             gsub(/\.\//, "", $0);
@@ -80,18 +88,14 @@ snap() {
         }' && \
         echo && \
         echo "=== Files ===" && \
-        find . -type f -not -path "*/\.*" ${exclude:+-not -path "*/$exclude*"} | sort | \
+        eval "find . -type f -not -path \"*/\.*\" $exclude_args" | sort | \
         awk '{
             gsub(/\.\//, "", $0);
             print "- " $0;
         }' && \
         echo && \
         # For file contents
-        if [[ -n "$exclude" ]]; then
-            find . -type f -not -path "*/\.*" -not -path "*/$exclude*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;
-        else
-            find . -type f -not -path "*/\.*" -exec sh -c 'printf "\n\n=== File: {} ===\n\n"; cat {}' \;
-        fi) | \
+        eval "find . -type f -not -path \"*/\.*\" $exclude_args -exec sh -c 'printf \"\n\n=== File: {} ===\n\n\"; cat {}' \;") | \
     tee >(pbcopy)
 }
 
