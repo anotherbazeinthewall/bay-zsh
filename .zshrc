@@ -56,7 +56,7 @@ export PIPENV_VERBOSITY=-1
 
 debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
 
-alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total" && echo "Total size: $(du -sh . | cut -f1)"' # Show hidden files by default
+alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total"' # Show hidden files by default
 
 snap() {
     local dir=${1:-.}
