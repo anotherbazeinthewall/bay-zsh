@@ -79,8 +79,8 @@ snap() {
         echo "=== Current Path: $(pwd) ===" && \
         echo && \
         echo "=== Directory Structure ===" && \
-        # Using eval to process the exclude_args with multiple patterns
-        eval "find . -type d -not -path \"*/\.*\" $exclude_args" | sort | \
+        # Don't use exclude_args for directory listing
+        find . -type d -not -path "*/\.*" | sort | \
         awk '{
             gsub(/[^\/]+\//, "  ", $0);
             gsub(/\.\//, "", $0);
@@ -88,13 +88,14 @@ snap() {
         }' && \
         echo && \
         echo "=== Files ===" && \
-        eval "find . -type f -not -path \"*/\.*\" $exclude_args" | sort | \
+        # Don't use exclude_args for file listing
+        find . -type f -not -path "*/\.*" | sort | \
         awk '{
             gsub(/\.\//, "", $0);
             print "- " $0;
         }' && \
         echo && \
-        # For file contents
+        # Only use exclude_args for file contents
         eval "find . -type f -not -path \"*/\.*\" $exclude_args -exec sh -c 'printf \"\n\n=== File: {} ===\n\n\"; cat {}' \;") | \
     tee >(pbcopy)
 }
