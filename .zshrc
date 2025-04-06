@@ -2,7 +2,7 @@
 # HOUSEKEEPING
 # =============================================================================
 
-export DEBUG_ZSH=false  # Set to 'true' to enable debug output
+export DEBUG_ZSH=false  # Set to 'true' if you want debug messages
 
 debug() {
     if [ "$DEBUG_ZSH" = true ]; then
@@ -12,17 +12,17 @@ debug() {
 
 debug "\e[2;3mInitiating ZSH Run Commands...\e[0m"
 
-# Helper function: Are we in VS Code?
+# Helper function to detect VS Code
 is_vscode() {
     [[ "$TERM_PROGRAM" == "vscode" ]] || [[ -n "$VSCODE_PID" ]] || [[ -n "$VSCODE_INJECTION" ]]
 }
 
-# If this file is being sourced directly...
+# If sourcing this file directly...
 if [[ "${(%):-%N}" == ".zshrc" ]]; then
     export SOURCING_ZSHRC="true"
 fi
 
-# If any old VIRTUAL_ENV is set but missing, unset it
+# Clear out stale/invalid VIRTUAL_ENV
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
     unset VIRTUAL_ENV
 fi
@@ -31,13 +31,15 @@ fi
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 unset VIRTUAL_ENV_INFO
 
-# Basic color and pycache settings
+# Basic color settings
 export TERM="xterm-256color"
 export ZSH_TMUX_FIXTERM=256
 export COLORTERM="truecolor"
+
+# Don’t write .pyc files
 export PYTHONDONTWRITEBYTECODE=1
 
-# Pyenv setup (kept in .zshrc as you requested, for self-containment)
+# Pyenv: keep it here for “self containment”
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
 
@@ -45,21 +47,13 @@ eval "$(pyenv init -)"
 export PIPENV_VENV_IN_PROJECT=1
 export PIPENV_VERBOSITY=-1
 
-# -----------------------------------------------------------------------------
-# Optional early-return for VS Code (if you want minimal overhead there):
-# -----------------------------------------------------------------------------
-# if is_vscode; then
-#     debug "In VS Code: Skipping heavy environment logic..."
-#     return
-# fi
-
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
 # =============================================================================
 
 debug "\e[2;3mConfiguring aliases and custom functions...\e[0m"
 
-alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total"' 
+alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total"'
 
 snap() {
     local dir=${1:-.}
@@ -70,8 +64,9 @@ snap() {
     for pattern in "$@"; do
         exclude_args="$exclude_args -not -path \"*/$pattern*\""
     done
-    
-    (cd "$dir" && \
+
+    (
+        cd "$dir" && \
         echo "=== Current Path: $(pwd) ===" && \
         echo && \
         echo "=== Directory Structure ===" && \
@@ -89,8 +84,8 @@ snap() {
             print "- " $0;
         }' && \
         echo && \
-        eval "find . -type f -not -path \"*/\.*\" $exclude_args -exec sh -c 'printf \"\n\n=== File: {} ===\n\n\"; cat {}' \;") | \
-    tee >(pbcopy)
+        eval "find . -type f -not -path \"*/\.*\" $exclude_args -exec sh -c 'printf \"\n\n=== File: {} ===\n\n\"; cat {}' \;"
+    ) | tee >(pbcopy)
 }
 
 # =============================================================================
@@ -101,7 +96,7 @@ debug "\e[2;3mConfiguring path management...\e[0m"
 
 export PATH="$HOME/.local/bin:$PATH"
 
-# Deduplicate PATH entries
+# Deduplicate PATH
 new_path=""
 while IFS= read -r path_entry; do
     if [[ ":$new_path:" != *":$path_entry:"* ]]; then
@@ -117,7 +112,7 @@ export PATH="$new_path"
 
 debug "\e[2;3mSetting up environment management...\e[0m"
 
-# --- Lazy-load nvm ---
+# Lazy-load nvm
 lazy_load_nvm() {
     if [[ -z "$LAZY_NVM_LOADED" ]]; then
         debug "Lazy-loading nvm..."
@@ -127,14 +122,13 @@ lazy_load_nvm() {
     fi
 }
 
-# Initialize NVM_DIR but do NOT source nvm yet
+# Set up NVM_DIR but don't source yet
 export NVM_DIR="$HOME/.nvm"
 
-# Helper to find a file upwards
+# Helper to find file upwards
 find_file_in_parents() {
     local file="$1"
     local dir="$PWD"
-    
     while [[ "$dir" != "/" ]]; do
         [[ -e "$dir/$file" ]] && echo "$dir" && return 0
         dir=${dir:h}
@@ -142,7 +136,7 @@ find_file_in_parents() {
     return 1
 }
 
-# Get a python version from an interpreter
+# Get python version from interpreter
 get_python_version() {
     local python_path="${1:-python}"
     "$python_path" -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null
@@ -159,8 +153,9 @@ deactivate_venv() {
     if [[ -n "$VIRTUAL_ENV" ]]; then
         debug "Deactivating venv: $VIRTUAL_ENV"
         type deactivate >/dev/null 2>&1 && deactivate
-        unset VIRTUAL_ENV VIRTUAL_ENV_INFO
     fi
+    unset VIRTUAL_ENV
+    unset VIRTUAL_ENV_INFO
 }
 
 # Activate a new venv
@@ -180,29 +175,6 @@ activate_venv() {
     fi
 }
 
-handle_python_environment() {
-    local project_dir="$1"
-    local venv_path
-    venv_path="$(get_venv_path "$project_dir")"
-    
-    debug "handle_python_environment: project_dir=$project_dir venv_path=$venv_path"
-    
-    [[ -z "$venv_path" ]] && return
-    
-    if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
-        # If in VS Code but we already have a venv, just update info
-        local python_version
-        python_version="$(get_python_version "$VIRTUAL_ENV/bin/python")"
-        export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
-        return
-    fi
-    
-    # Otherwise, activate venv if not in VS Code or if no existing venv
-    if ! is_vscode || [[ -z "$VIRTUAL_ENV" ]]; then
-        activate_venv "$venv_path"
-    fi
-}
-
 get_venv_path() {
     local base_dir="$1"
     if [[ -d "$base_dir/venv" ]]; then
@@ -212,12 +184,40 @@ get_venv_path() {
     fi
 }
 
+# Updated handle_python_environment to check the actual interpreter
+handle_python_environment() {
+    local project_dir="$1"
+    local venv_path
+    venv_path="$(get_venv_path "$project_dir")"
+    
+    debug "handle_python_environment: project_dir=$project_dir venv_path=$venv_path"
+
+    # Reset VIRTUAL_ENV_INFO so we don't show stale data.
+    export VIRTUAL_ENV_INFO=""
+
+    if [[ -n "$venv_path" ]]; then
+        # Check if the venv is already active and matches the expected interpreter
+        if [[ "$VIRTUAL_ENV" == "$venv_path" && "$(which python)" == "$venv_path/bin/python" ]]; then
+            # Already using the correct venv
+            local python_version
+            python_version="$(get_python_version "$venv_path/bin/python")"
+            export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
+        else
+            # Otherwise, activate the venv
+            activate_venv "$venv_path"
+        fi
+    else
+        # No local venv found => deactivate any existing one
+        deactivate_venv
+    fi
+}
+
 handle_node_environment() {
     local project_dir="$1"
     local node_info=""
     
     if [[ -d "$project_dir/node_modules" ]] || [[ -f "$project_dir/.nvmrc" ]]; then
-        # Now actually load nvm
+        # Actually load nvm
         lazy_load_nvm
         
         if [[ -f "$project_dir/.nvmrc" ]]; then
@@ -244,27 +244,31 @@ manage_environment() {
     (( ENVIRONMENT_MANAGEMENT_COUNT++ ))
     debug "Environment management level: $ENVIRONMENT_MANAGEMENT_COUNT"
     
-    local python_root node_root
+    # Locate Python project root
+    local python_root
     python_root="$(find_file_in_parents "venv" || find_file_in_parents ".venv")"
-    node_root="$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")"
     
-    # Python
     if [[ -n "$python_root" ]]; then
         handle_python_environment "$python_root"
     else
-        deactivate_venv
+        # If there's an active venv but no .venv found in parents => deactivate
+        if [[ -n "$VIRTUAL_ENV" ]]; then
+            deactivate_venv
+        fi
     fi
     
-    # Node
+    # Node environment
+    local node_root
+    node_root="$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")"
     local node_info=""
     if [[ -n "$node_root" ]]; then
         node_info="$(handle_node_environment "$node_root")"
     fi
     
-    # Merge environment info
-    if [[ -n "$node_info" ]]; then
-        export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
-    elif [[ -z "$python_root" ]]; then
+    # Merge environment info if applicable
+    if [[ -n "$node_info" || -n "$python_root" ]]; then
+        export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO:-}${node_info}"
+    else
         export VIRTUAL_ENV_INFO=""
     fi
     
@@ -273,8 +277,12 @@ manage_environment() {
 }
 
 autoload -U add-zsh-hook
+# For directory changes
 add-zsh-hook chpwd manage_environment
-manage_environment
+
+# Force environment management right before the first prompt
+# so it sees the actual $PWD on a *newly opened shell*
+add-zsh-hook precmd manage_environment
 
 # =============================================================================
 # GIT CONFIGURATION
@@ -305,7 +313,8 @@ function git_prompt_info() {
 function parse_git_dirty() {
     local STATUS=''
     local FLAGS=('--porcelain')
-    local CONFIG_HIDE_DIRTY=$(git config --get zsh.hide-dirty)
+    local CONFIG_HIDE_DIRTY
+    CONFIG_HIDE_DIRTY="$(git config --get zsh.hide-dirty)"
     if [[ "$CONFIG_HIDE_DIRTY" != "1" ]]; then
         if [[ $(git --version | awk '{print $3}' | cut -d. -f2) -gt 7 ]]; then
             FLAGS+='--ignore-submodules=dirty'
@@ -339,7 +348,6 @@ function format_env_info_prompt() {
     local env_info="$1"
     if [[ -n "$env_info" ]]; then
         if [[ "$env_info" =~ "(python|node)\((.*)\) " ]]; then
-            # For example: python(3.9.4) or node(16.0.0)
             local env_type="${match[1]}"
             local version="${match[2]}"
             echo "%F{221}${env_type}(%F{211}${version}%F{221})%f "
@@ -359,25 +367,20 @@ PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(forma
 
 debug "\e[2;3mConfiguring completion & keybindings...\e[0m"
 
-# -----------------------------------------------------------------------------
-# Only clone zsh-autosuggestions if it is missing
-# -----------------------------------------------------------------------------
+# Clone zsh-autosuggestions only if missing
 if [[ ! -d "$HOME/.zsh/zsh-autosuggestions" ]]; then
     debug "zsh-autosuggestions not found, cloning..."
     git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || \
         echo "WARNING: Failed to clone zsh-autosuggestions."
 fi
 
-# Source zsh-autosuggestions
+# Source it if available
 if [[ -f "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
     source "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
 else
-    debug "zsh-autosuggestions directory found, but the .zsh file doesn't exist."
+    debug "zsh-autosuggestions directory found, but zsh-autosuggestions.zsh doesn't exist."
 fi
 
-# -----------------------------------------------------------------------------
-# Autosuggestions partial accept widgets
-# -----------------------------------------------------------------------------
 typeset -g _saved_postdisplay=""
 
 local DELIMITERS=('/' ':' ' ')
@@ -454,12 +457,11 @@ ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#forward-ch
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#vi-forward-char}")
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
-# Key bindings
 bindkey '^I'   autosuggest-accept
 bindkey '^E'   forward_to_delimiter
 bindkey '^A'   backward_to_delimiter
 
-# Enable completion system
+# Enable ZSH completion
 ENABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
 autoload -Uz compinit && compinit
