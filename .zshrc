@@ -2,7 +2,7 @@
 # HOUSEKEEPING
 # =============================================================================
 
-export DEBUG_ZSH=false  # Set to false to disable debug output
+export DEBUG_ZSH=false  # Set to 'true' to enable debug output
 
 debug() {
     if [ "$DEBUG_ZSH" = true ]; then
@@ -10,39 +10,34 @@ debug() {
     fi
 }
 
-debug "\e[2;3mInitiating ZSH Run Commands... \e[0m"
+debug "\e[2;3mInitiating ZSH Run Commands...\e[0m"
 
-# Helper function to check if we're in VS Code
+# Helper function: Are we in VS Code?
 is_vscode() {
     [[ "$TERM_PROGRAM" == "vscode" ]] || [[ -n "$VSCODE_PID" ]] || [[ -n "$VSCODE_INJECTION" ]]
 }
 
-# Set sourcing flag if we're sourcing the file
+# If this file is being sourced directly...
 if [[ "${(%):-%N}" == ".zshrc" ]]; then
     export SOURCING_ZSHRC="true"
 fi
 
-# UNSET PREXISTING ENVS
+# If any old VIRTUAL_ENV is set but missing, unset it
 if [[ -n "$VIRTUAL_ENV" ]] && [[ ! -d "$VIRTUAL_ENV" ]]; then
     unset VIRTUAL_ENV
 fi
 
-# UNSET VIRTUAL_ENV_INFO
-if [[ -n "$VIRTUAL_ENV_INFO" ]]; then
-    unset VIRTUAL_ENV_INFO
-fi
-
-# Disable all forms of virtual env prompts
+# No custom prompt from Python venv
 export VIRTUAL_ENV_DISABLE_PROMPT=1
-unset VIRTUAL_ENV_NAME
+unset VIRTUAL_ENV_INFO
 
-# Update terminal color settings 
+# Basic color and pycache settings
 export TERM="xterm-256color"
 export ZSH_TMUX_FIXTERM=256
 export COLORTERM="truecolor"
-
-# Disable pychache 
 export PYTHONDONTWRITEBYTECODE=1
+
+# Pyenv setup (kept in .zshrc as you requested, for self-containment)
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
 
@@ -50,27 +45,28 @@ eval "$(pyenv init -)"
 export PIPENV_VENV_IN_PROJECT=1
 export PIPENV_VERBOSITY=-1
 
+# -----------------------------------------------------------------------------
+# Optional early-return for VS Code (if you want minimal overhead there):
+# -----------------------------------------------------------------------------
+# if is_vscode; then
+#     debug "In VS Code: Skipping heavy environment logic..."
+#     return
+# fi
+
 # =============================================================================
 # ALIASES & CUSTOM FUNCTIONS
 # =============================================================================
 
-debug "\e[2;3mConfiguring aliases and custom functions... \e[0m"
+debug "\e[2;3mConfiguring aliases and custom functions...\e[0m"
 
-alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total"' # Show hidden files by default
+alias ls='gls -lah --color=always | grep -E --color=never "^d.*" && gls -lah --color=always | grep -E --color=never -v "^d" | grep -v "^total"' 
 
 snap() {
     local dir=${1:-.}
-    
-    # Check if we have at least one argument
     if [[ $# -gt 0 ]]; then
-        # Shift to remove the first argument (directory)
         shift
-        # The remaining args are exclude patterns
     fi
-    
     local exclude_args=""
-    
-    # Build exclude arguments for find command
     for pattern in "$@"; do
         exclude_args="$exclude_args -not -path \"*/$pattern*\""
     done
@@ -79,7 +75,6 @@ snap() {
         echo "=== Current Path: $(pwd) ===" && \
         echo && \
         echo "=== Directory Structure ===" && \
-        # Don't use exclude_args for directory listing
         find . -type d -not -path "*/\.*" | sort | \
         awk '{
             gsub(/[^\/]+\//, "  ", $0);
@@ -88,14 +83,12 @@ snap() {
         }' && \
         echo && \
         echo "=== Files ===" && \
-        # Don't use exclude_args for file listing
         find . -type f -not -path "*/\.*" | sort | \
         awk '{
             gsub(/\.\//, "", $0);
             print "- " $0;
         }' && \
         echo && \
-        # Only use exclude_args for file contents
         eval "find . -type f -not -path \"*/\.*\" $exclude_args -exec sh -c 'printf \"\n\n=== File: {} ===\n\n\"; cat {}' \;") | \
     tee >(pbcopy)
 }
@@ -103,11 +96,12 @@ snap() {
 # =============================================================================
 # PATH MANAGEMENT
 # =============================================================================
-debug "\e[2;3mConfiguring path management... \e[0m"
+
+debug "\e[2;3mConfiguring path management...\e[0m"
 
 export PATH="$HOME/.local/bin:$PATH"
 
-## Clean up PATH
+# Deduplicate PATH entries
 new_path=""
 while IFS= read -r path_entry; do
     if [[ ":$new_path:" != *":$path_entry:"* ]]; then
@@ -120,13 +114,23 @@ export PATH="$new_path"
 # =============================================================================
 # ENVIRONMENT MANAGEMENT
 # =============================================================================
-debug "\e[2;3mConfiguring environment management...\e[0m"
 
-# Initialize NVM
+debug "\e[2;3mSetting up environment management...\e[0m"
+
+# --- Lazy-load nvm ---
+lazy_load_nvm() {
+    if [[ -z "$LAZY_NVM_LOADED" ]]; then
+        debug "Lazy-loading nvm..."
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        export LAZY_NVM_LOADED=1
+    fi
+}
+
+# Initialize NVM_DIR but do NOT source nvm yet
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 
-# Helper function to find files in parent directories
+# Helper to find a file upwards
 find_file_in_parents() {
     local file="$1"
     local dir="$PWD"
@@ -138,30 +142,19 @@ find_file_in_parents() {
     return 1
 }
 
-# Gets Python version from a specific Python interpreter
+# Get a python version from an interpreter
 get_python_version() {
     local python_path="${1:-python}"
     "$python_path" -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null
 }
 
-# Format environment info for prompt
 format_env_info() {
     local type="$1"
     local version="$2"
     echo "${type}(${version}) "
 }
 
-# Virtual environment management
-get_venv_path() {
-    local base_dir="$1"
-    
-    if [ -d "$base_dir/venv" ]; then
-        echo "$base_dir/venv"
-    elif [ -d "$base_dir/.venv" ]; then
-        echo "$base_dir/.venv"
-    fi
-}
-
+# Deactivate existing venv
 deactivate_venv() {
     if [[ -n "$VIRTUAL_ENV" ]]; then
         debug "Deactivating venv: $VIRTUAL_ENV"
@@ -170,13 +163,15 @@ deactivate_venv() {
     fi
 }
 
+# Activate a new venv
 activate_venv() {
     local venv_path="$1"
     if [[ -n "$venv_path" && -f "$venv_path/bin/activate" ]]; then
         debug "Activating venv: $venv_path"
         source "$venv_path/bin/activate"
         if [[ $? -eq 0 ]]; then
-            local python_version=$(get_python_version "$venv_path/bin/python")
+            local python_version
+            python_version="$(get_python_version "$venv_path/bin/python")"
             export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
             debug "Activation successful: $VIRTUAL_ENV_INFO"
         else
@@ -185,94 +180,106 @@ activate_venv() {
     fi
 }
 
-# Handle Python environment
 handle_python_environment() {
     local project_dir="$1"
-    local venv_path=$(get_venv_path "$project_dir")
+    local venv_path
+    venv_path="$(get_venv_path "$project_dir")"
     
     debug "handle_python_environment: project_dir=$project_dir venv_path=$venv_path"
     
-    # Early return if no venv found
     [[ -z "$venv_path" ]] && return
     
-    # VS Code with active venv - just update info
     if is_vscode && [[ -n "$VIRTUAL_ENV" ]]; then
-        local python_version=$(get_python_version "$VIRTUAL_ENV/bin/python")
+        # If in VS Code but we already have a venv, just update info
+        local python_version
+        python_version="$(get_python_version "$VIRTUAL_ENV/bin/python")"
         export VIRTUAL_ENV_INFO="$(format_env_info "python" "$python_version")"
         return
     fi
     
-    # Activate venv if not in VS Code or VS Code without active venv
+    # Otherwise, activate venv if not in VS Code or if no existing venv
     if ! is_vscode || [[ -z "$VIRTUAL_ENV" ]]; then
         activate_venv "$venv_path"
     fi
 }
 
-# Handle Node.js environment
+get_venv_path() {
+    local base_dir="$1"
+    if [[ -d "$base_dir/venv" ]]; then
+        echo "$base_dir/venv"
+    elif [[ -d "$base_dir/.venv" ]]; then
+        echo "$base_dir/.venv"
+    fi
+}
+
 handle_node_environment() {
     local project_dir="$1"
     local node_info=""
     
-    # Only handle Node environment if we have node_modules or .nvmrc
-    if [ -d "$project_dir/node_modules" ] || [ -f "$project_dir/.nvmrc" ]; then
-        if [ -f "$project_dir/.nvmrc" ]; then
+    if [[ -d "$project_dir/node_modules" ]] || [[ -f "$project_dir/.nvmrc" ]]; then
+        # Now actually load nvm
+        lazy_load_nvm
+        
+        if [[ -f "$project_dir/.nvmrc" ]]; then
             nvm use >/dev/null 2>&1
         else
             nvm use default >/dev/null 2>&1
         fi
         
         if command -v node >/dev/null 2>&1; then
-            local node_version=$(node -v | tr -d 'v')
-            node_info=$(format_env_info "node" "$node_version")
+            local node_version
+            node_version="$(node -v | tr -d 'v')"
+            node_info="$(format_env_info "node" "$node_version")"
         fi
     else
-        # If we're not in a Node project, clear the node info
         node_info=""
     fi
-    
     echo "$node_info"
 }
 
-# Main environment management function
 manage_environment() {
     typeset -g ENVIRONMENT_MANAGEMENT_COUNT=${ENVIRONMENT_MANAGEMENT_COUNT:-0}
-    ((ENVIRONMENT_MANAGEMENT_COUNT > 1)) && return
+    (( ENVIRONMENT_MANAGEMENT_COUNT > 1 )) && return
     
-    ((ENVIRONMENT_MANAGEMENT_COUNT++))
+    (( ENVIRONMENT_MANAGEMENT_COUNT++ ))
     debug "Environment management level: $ENVIRONMENT_MANAGEMENT_COUNT"
     
-    # Find project roots
-    local python_root=$(find_file_in_parents "venv" || find_file_in_parents ".venv")
-    local node_root=$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")
+    local python_root node_root
+    python_root="$(find_file_in_parents "venv" || find_file_in_parents ".venv")"
+    node_root="$(find_file_in_parents "node_modules" || find_file_in_parents ".nvmrc")"
     
-    # Handle environments
-    [[ -n "$python_root" ]] && handle_python_environment "$python_root" || deactivate_venv
+    # Python
+    if [[ -n "$python_root" ]]; then
+        handle_python_environment "$python_root"
+    else
+        deactivate_venv
+    fi
     
-    # Handle Node environment
+    # Node
     local node_info=""
-    [[ -n "$node_root" ]] && node_info=$(handle_node_environment "$node_root")
+    if [[ -n "$node_root" ]]; then
+        node_info="$(handle_node_environment "$node_root")"
+    fi
     
-    # Update environment info
+    # Merge environment info
     if [[ -n "$node_info" ]]; then
         export VIRTUAL_ENV_INFO="${VIRTUAL_ENV_INFO}${node_info}"
     elif [[ -z "$python_root" ]]; then
         export VIRTUAL_ENV_INFO=""
     fi
     
-    ((ENVIRONMENT_MANAGEMENT_COUNT--))
-    ((ENVIRONMENT_MANAGEMENT_COUNT == 0)) && unset ENVIRONMENT_MANAGEMENT_COUNT
+    (( ENVIRONMENT_MANAGEMENT_COUNT-- ))
+    (( ENVIRONMENT_MANAGEMENT_COUNT == 0 )) && unset ENVIRONMENT_MANAGEMENT_COUNT
 }
 
-# Set up directory change hook
 autoload -U add-zsh-hook
 add-zsh-hook chpwd manage_environment
-
-# Initial environment setup
 manage_environment
 
 # =============================================================================
 # GIT CONFIGURATION
 # =============================================================================
+
 debug "\e[2;3mConfiguring Git prompt...\e[0m"
 
 ZSH_THEME_GIT_PROMPT_PREFIX="%F{116}git("
@@ -284,12 +291,9 @@ function git_prompt_info() {
     local branch_or_hash
     local is_detached=false
 
-    # Try to get branch name first
     if branch_or_hash=$(git symbolic-ref HEAD 2> /dev/null); then
-        # Remove refs/heads/ prefix and use green color for branch
         branch_or_hash="%F{green}${branch_or_hash#refs/heads/}"
     else
-        # If in detached HEAD, get commit hash and use purple color
         branch_or_hash=$(git rev-parse --short HEAD 2> /dev/null) || return
         is_detached=true
         branch_or_hash="%F{magenta}${branch_or_hash}"
@@ -319,10 +323,10 @@ function parse_git_dirty() {
 }
 
 # =============================================================================
-# PROMPT ENHANCEMENTS 
+# PROMPT ENHANCEMENTS
 # =============================================================================
 
-debug "\e[2;3mConfiguring prompt enhancements...\e[0m"
+debug "\e[2;3mConfiguring prompt...\e[0m"
 
 setopt PROMPT_SUBST
 
@@ -330,12 +334,12 @@ function set_prompt_username() {
     prompt_username="%F{78}%n%f"
 }
 
-# Add color formatting to VIRTUAL_ENV_INFO for the prompt
+# Colorize environment info
 function format_env_info_prompt() {
     local env_info="$1"
     if [[ -n "$env_info" ]]; then
-        # Split the string into parts and color them
         if [[ "$env_info" =~ "(python|node)\((.*)\) " ]]; then
+            # For example: python(3.9.4) or node(16.0.0)
             local env_type="${match[1]}"
             local version="${match[2]}"
             echo "%F{221}${env_type}(%F{211}${version}%F{221})%f "
@@ -345,7 +349,6 @@ function format_env_info_prompt() {
     fi
 }
 
-# Add the precmd hook for username
 add-zsh-hook precmd set_prompt_username
 
 PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(format_env_info_prompt "$VIRTUAL_ENV_INFO")"}$(git_prompt_info)%B%F{white}%#%f%b '
@@ -353,40 +356,46 @@ PROMPT='%F{176}☼%f ${prompt_username} %F{209}%~%f ${VIRTUAL_ENV_INFO:+"$(forma
 # =============================================================================
 # COMPLETION SYSTEM & KEYBINDINGS
 # =============================================================================
-debug "\e[2;3mConfiguring completion system and keybindings...\e[0m"
 
-# Initialize zsh-autosuggestions
-[[ ! -d ~/.zsh/zsh-autosuggestions ]] && \
-    git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
-source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+debug "\e[2;3mConfiguring completion & keybindings...\e[0m"
 
-# Initialize storage variable
+# -----------------------------------------------------------------------------
+# Only clone zsh-autosuggestions if it is missing
+# -----------------------------------------------------------------------------
+if [[ ! -d "$HOME/.zsh/zsh-autosuggestions" ]]; then
+    debug "zsh-autosuggestions not found, cloning..."
+    git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || \
+        echo "WARNING: Failed to clone zsh-autosuggestions."
+fi
+
+# Source zsh-autosuggestions
+if [[ -f "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+    source "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
+else
+    debug "zsh-autosuggestions directory found, but the .zsh file doesn't exist."
+fi
+
+# -----------------------------------------------------------------------------
+# Autosuggestions partial accept widgets
+# -----------------------------------------------------------------------------
 typeset -g _saved_postdisplay=""
 
-# Delimiter functions
 local DELIMITERS=('/' ':' ' ')
 
 function forward_to_delimiter() {
     [[ -z $POSTDISPLAY ]] && return
-
     local suggestion=$POSTDISPLAY
     local offset=0
-
-    # Check if starts with delimiter
     [[ $suggestion[1] =~ [/:\ ] ]] && {
         suggestion=${suggestion:1}
         offset=1
     }
-
-    # Find closest delimiter
     local min_pos=$((${#suggestion} + 1))
     for delim in $DELIMITERS; do
         local pos=${suggestion[(i)$delim]}
-        [[ $pos -le ${#suggestion} ]] && ((pos < min_pos)) && min_pos=$pos
+        (( pos <= ${#suggestion} && pos < min_pos )) && min_pos=$pos
     done
-
-    # Move cursor and trigger proper highlighting
-    if [[ $min_pos -le ${#suggestion} ]]; then
+    if (( min_pos <= ${#suggestion} )); then
         CURSOR=$((CURSOR + min_pos + offset))
         _zsh_autosuggest_highlight_reset
         _zsh_autosuggest_highlight_apply
@@ -394,33 +403,27 @@ function forward_to_delimiter() {
         CURSOR=$((CURSOR + ${#POSTDISPLAY}))
         _zsh_autosuggest_highlight_reset
     fi
-
-    # Ensure proper color state
     region_highlight=()
-    region_highlight+=("0 ${#BUFFER} default") # White for BUFFER
-    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242") # Gray for POSTDISPLAY
+    region_highlight+=("0 ${#BUFFER} default")
+    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242")
     zle -R
 }
 
 function backward_to_delimiter() {
     [[ $CURSOR -eq 0 ]] && return
-
-    # Initialize or preserve suggestion
     [[ -z "$_saved_postdisplay" ]] && _saved_postdisplay="$POSTDISPLAY"
 
     local last_pos=0
     local text_before="$LBUFFER"
-
-    # Find last delimiter
     for ((i = CURSOR - 1; i > 0; i--)); do
-        [[ "${text_before[$i]}" =~ [/:\ ] ]] && {
+        if [[ "${text_before[$i]}" =~ [/:\ ] ]]; then
             last_pos=$i
             break
-        }
+        fi
     done
 
-    if ((last_pos > 0)); then
-        _saved_postdisplay="${LBUFFER:$last_pos:$((CURSOR-last_pos))}$_saved_postdisplay"
+    if (( last_pos > 0 )); then
+        _saved_postdisplay="${LBUFFER:$last_pos:$((CURSOR - last_pos))}$_saved_postdisplay"
         POSTDISPLAY="$_saved_postdisplay"
         BUFFER="${LBUFFER[1,$last_pos]}"
         CURSOR=$last_pos
@@ -428,38 +431,33 @@ function backward_to_delimiter() {
         BUFFER="" POSTDISPLAY="" _saved_postdisplay="" CURSOR=0
     fi
 
-    # Ensure proper color state
     region_highlight=()
-    region_highlight+=("0 ${#BUFFER} default") # White for BUFFER
-    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242") # Gray for POSTDISPLAY
+    region_highlight+=("0 ${#BUFFER} default")
+    (( ${#POSTDISPLAY} > 0 )) && region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=242")
     zle -R
 }
 
-function reset_saved_suggestion() { 
+function reset_saved_suggestion() {
     _saved_postdisplay=""
 }
 
-# Initialize widgets
-for widget in forward_to_delimiter backward_to_delimiter \
-            reset_saved_suggestion; do
+for widget in forward_to_delimiter backward_to_delimiter reset_saved_suggestion; do
     zle -N $widget
 done
 
-# Configure zsh-autosuggestions widgets
 typeset -ga ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
     forward_to_delimiter
     $ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS
 )
-
 ZSH_AUTOSUGGEST_CLEAR_WIDGETS+=(reset_saved_suggestion)
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#forward-char}")
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS=("${(@)ZSH_AUTOSUGGEST_ACCEPT_WIDGETS:#vi-forward-char}")
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
 # Key bindings
-bindkey '^I'   autosuggest-accept           # Tab
-bindkey '^E'   forward_to_delimiter         # Cmd+Right (Ctrl+E)
-bindkey '^A'   backward_to_delimiter        # Cmd+Left (Ctrl+A)
+bindkey '^I'   autosuggest-accept
+bindkey '^E'   forward_to_delimiter
+bindkey '^A'   backward_to_delimiter
 
 # Enable completion system
 ENABLE_CORRECTION="true"
